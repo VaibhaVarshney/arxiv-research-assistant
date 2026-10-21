@@ -24,7 +24,8 @@ DELAY_SECONDS = 3.1      # arXiv asks for max 1 request every 3 seconds
 MAX_RETRIES = 5
 
 # Identify yourself. Put your real email here; it's polite and helps if arXiv needs to reach you.
-HEADERS = {"User-Agent": "arxiv-research-assistant/0.1 (mailto:YOUR_EMAIL@umd.edu)"}
+HEADERS = {
+    "User-Agent": "arxiv-research-assistant/0.1 (mailto:varshney2vaibhav@gmail.com)"}
 
 ID_PATTERN = re.compile(r"/abs/(.+?)(?:v(\d+))?$")
 
@@ -46,7 +47,8 @@ def fetch_page(query: str, start: int):
         "sortOrder": "descending",
     }
     for attempt in range(MAX_RETRIES):
-        resp = requests.get(API_URL, params=params, headers=HEADERS, timeout=30)
+        resp = requests.get(API_URL, params=params,
+                            headers=HEADERS, timeout=30)
         if resp.status_code == 200:
             return feedparser.parse(resp.text)
         # 429 / 503 = arXiv is busy. Back off exponentially instead of hammering it.
@@ -64,7 +66,8 @@ def clean(text: str) -> str:
 def parse_entry(entry) -> dict:
     match = ID_PATTERN.search(entry.id)
     arxiv_id, version = match.group(1), int(match.group(2) or 1)
-    pdf_url = next((l.href for l in entry.links if l.get("title") == "pdf"), None)
+    pdf_url = next(
+        (l.href for l in entry.links if l.get("title") == "pdf"), None)
     return {
         "arxiv_id": arxiv_id,                       # versionless: our stable key
         "version": version,
@@ -82,8 +85,10 @@ def parse_entry(entry) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--days", type=int, default=3, help="look back this many days")
-    parser.add_argument("--max", type=int, default=500, help="cap on papers fetched")
+    parser.add_argument("--days", type=int, default=3,
+                        help="look back this many days")
+    parser.add_argument("--max", type=int, default=500,
+                        help="cap on papers fetched")
     args = parser.parse_args()
 
     query = build_query(args.days)
