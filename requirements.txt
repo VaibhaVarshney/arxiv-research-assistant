@@ -1,3 +1,4 @@
 requests>=2.31
 feedparser>=6.0
 boto3>=1.40
+langgraph>=1.0
