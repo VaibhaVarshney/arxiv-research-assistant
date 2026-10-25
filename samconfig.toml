@@ -14,4 +14,4 @@ profile = "deploy"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-parameter_overrides = "ContactEmail=\"varshney2vaibhav@gmail.com\""
+parameter_overrides = "ContactEmail=\"varshney2vaibhav@gmail.com\" AlertEmail=\"varshney2vaibhav@gmail.com\""

@@ -22,6 +22,11 @@ def fetch_handler(event, context):
     max_papers = int(event.get("max", 1000))
 
     papers = fetch_papers(days=days, max_papers=max_papers)
+    if not papers:
+        # Nothing new (e.g. a weekend). Writing an empty file would trigger a pointless index run.
+        log("fetch_skipped", request_id=context.aws_request_id, reason="no papers", days=days)
+        return {"bucket": RAW_BUCKET, "key": None, "papers": 0}
+
     now = datetime.now(timezone.utc)
     key = f"raw/{now:%Y/%m/%d}/papers_{now:%H%M%S}.jsonl"
     body = "\n".join(json.dumps(p, ensure_ascii=False) for p in papers)

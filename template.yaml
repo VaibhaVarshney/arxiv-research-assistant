@@ -1,8 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: arXiv research assistant - Phase 1 (fetch, index, query Lambdas)
+Description: arXiv research assistant - Phase 1 (automatic daily ingestion + query)
 
-# Values you can change at deploy time without editing this file.
 Parameters:
   VectorBucketName:
     Type: String
@@ -16,8 +15,10 @@ Parameters:
   ContactEmail:
     Type: String
     Description: Sent to arXiv in the User-Agent header, as their API terms ask
+  AlertEmail:
+    Type: String
+    Description: Where to send an email when a pipeline run fails for good
 
-# Settings shared by every function.
 Globals:
   Function:
     Runtime: python3.13
@@ -30,10 +31,12 @@ Globals:
         VECTOR_INDEX: !Ref VectorIndexName
         LLM_MODEL_ID: !Ref LlmModelId
         CONTACT_EMAIL: !Ref ContactEmail
-        RAW_BUCKET: !Ref RawBucket
+        # Built from a fixed pattern instead of !Ref RawBucket. The bucket's S3 trigger points
+        # at IndexFunction, so if the functions also pointed back at the bucket, CloudFormation
+        # would hit a circular dependency and refuse to deploy.
+        RAW_BUCKET: !Sub "arxiv-rag-raw-${AWS::AccountId}"
 
 Resources:
-  # Raw JSONL files from arXiv land here. Private, encrypted by default.
   RawBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -44,20 +47,38 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # 1) arXiv -> S3. Mostly waiting on arXiv's 3-second rate limit, so little memory is needed.
+  # ---------------------------------------------------------------- 1) Fetch
   FetchFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: handlers.fetch_handler
       Timeout: 300
-      MemorySize: 512
+      MemorySize: 256            # used ~100 MB in Step 4
       LoggingConfig:
         LogGroup: !Ref FetchLogs
       Policies:
         - S3WritePolicy:
-            BucketName: !Ref RawBucket
+            BucketName: !Sub "arxiv-rag-raw-${AWS::AccountId}"
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt FailedRunsQueue.QueueName
+      # Async invocations (schedules, S3 events) retry on failure, then land in the dead-letter queue.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 2
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !GetAtt FailedRunsQueue.Arn
+      Events:
+        DailyFetch:
+          Type: ScheduleV2       # EventBridge Scheduler
+          Properties:
+            # arXiv announces new papers around 8 pm ET, Sunday to Thursday. Run 2 hours after.
+            ScheduleExpression: "cron(0 22 ? * SUN-THU *)"
+            ScheduleExpressionTimezone: America/New_York
+            # 4-day window covers weekends and API lag. Overlap is free: the indexer skips repeats.
+            Input: '{"days": 4, "max": 1500}'
 
-  # 2) S3 -> embeddings -> S3 Vectors.
+  # ---------------------------------------------------------------- 2) Index
   IndexFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -67,16 +88,38 @@ Resources:
         LogGroup: !Ref IndexLogs
       Policies:
         - S3ReadPolicy:
-            BucketName: !Ref RawBucket
+            BucketName: !Sub "arxiv-rag-raw-${AWS::AccountId}"
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt FailedRunsQueue.QueueName
         - Statement:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
             - Effect: Allow
-              Action: s3vectors:PutVectors
+              # GetVectors lets us check which papers are already indexed before embedding.
+              Action: [s3vectors:PutVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
+      EventInvokeConfig:
+        MaximumRetryAttempts: 2
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !GetAtt FailedRunsQueue.Arn
+      Events:
+        NewRawFile:
+          Type: S3
+          Properties:
+            Bucket: !Ref RawBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: raw/
+                  - Name: suffix
+                    Value: .jsonl
 
-  # 3) question -> retrieve -> LLM -> cited answer.
+  # ---------------------------------------------------------------- 3) Query
   QueryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -89,18 +132,47 @@ Resources:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource:
-                # Embedding model for the question
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
-                # Cross-region inference profiles route to models in several US regions,
-                # so the role needs both the profile and the underlying models.
                 - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
                 - "arn:aws:bedrock:*::foundation-model/*"
             - Effect: Allow
-              # GetVectors is required because we use filters and returnMetadata.
               Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
 
-  # Logs auto-delete after 2 weeks instead of piling up forever.
+  # ---------------------------------------------------------------- Failure handling
+  # Runs that still fail after all retries end up here, with the original event attached,
+  # so you can see what failed and replay it.
+  FailedRunsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600   # 14 days
+
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  # Fires as soon as anything lands in the dead-letter queue.
+  FailedRunsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: An arXiv pipeline run failed after all retries. Check the FailedRunsQueue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt FailedRunsQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
+      OKActions: [!Ref AlertsTopic]
+
   FetchLogs:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -126,3 +198,5 @@ Outputs:
     Value: !Ref IndexFunction
   QueryFunctionName:
     Value: !Ref QueryFunction
+  FailedRunsQueueUrl:
+    Value: !Ref FailedRunsQueue
