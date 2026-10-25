@@ -1,20 +1,4 @@
-"""
-The "G" in RAG: prompt building and the LLM call.
-"""
-import os
-import sys
-from pathlib import Path
-
-# Temporary: lets us reuse src/indexing code from here.
-# In Step 4 we package everything properly for Lambda and this goes away.
-sys.path.append(str(Path(__file__).resolve().parents[1] / "indexing"))
-
-from aws_config import bedrock  # noqa: E402
-
-# Cross-region inference profile: Bedrock routes the call to whichever US region
-# has capacity. That's why the ID starts with "us." instead of "anthropic.".
-LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "us.amazon.nova-2-lite-v1:0")
-MAX_OUTPUT_TOKENS = 2048
+from .config import LLM_MODEL_ID, MAX_OUTPUT_TOKENS, bedrock
 
 SYSTEM_PROMPT = """You are a research assistant that answers questions about recent arXiv papers.
 
@@ -29,7 +13,6 @@ Rules:
 
 
 def format_sources(sources: list[dict]) -> str:
-    """Wrap each abstract in tags so the model can tell where one paper ends and the next begins."""
     blocks = []
     for s in sources:
         m = s["metadata"]
@@ -52,8 +35,6 @@ def generate_answer(question: str, sources: list[dict]) -> dict:
         messages=[{"role": "user", "content": [{"text": user_message}]}],
         inferenceConfig={"maxTokens": MAX_OUTPUT_TOKENS},
     )
-    # The reply can contain several blocks (e.g. the model's private reasoning).
-    # We only show the final text blocks.
     blocks = resp["output"]["message"]["content"]
     text = "\n".join(b["text"] for b in blocks if "text" in b).strip()
     return {
@@ -61,5 +42,4 @@ def generate_answer(question: str, sources: list[dict]) -> dict:
         "stop_reason": resp["stopReason"],
         "input_tokens": resp["usage"]["inputTokens"],
         "output_tokens": resp["usage"]["outputTokens"],
-        "llm_latency_ms": resp["metrics"]["latencyMs"],
     }

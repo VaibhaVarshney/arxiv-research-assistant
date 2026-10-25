@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arxiv-rag"
+version = "0.2.0"
+description = "Serverless agentic RAG over daily arXiv papers"
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.31",
+    "feedparser>=6.0",
+    "boto3>=1.40",
+    "langgraph>=1.0",
+]
+
+# The package lives in app/ (where Lambda needs it). This tells pip where to find it.
+[tool.setuptools.packages.find]
+where = ["app"]
+include = ["arxiv_rag*"]

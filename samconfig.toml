@@ -1,0 +1,17 @@
+# Saved deploy settings, so you can just run `sam build` and `sam deploy`.
+version = 0.1
+
+[default.global.parameters]
+stack_name = "arxiv-rag"
+region = "us-east-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+profile = "deploy"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+parameter_overrides = "ContactEmail=\"varshney2vaibhav@gmail.com\""
