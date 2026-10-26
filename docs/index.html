@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>arXiv Research Assistant</title>
+    <meta
+      name="description"
+      content="Ask questions about recent AI papers on arXiv and get answers with citations."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f7f5f0;
+        --surface: #ffffff;
+        --ink: #1d1b18;
+        --muted: #6b665d;
+        --faint: #9a948a;
+        --line: #e4dfd5;
+        --accent: #b3261e;
+        --accent-soft: #fbeceb;
+        --ok: #2f6b3a;
+        --ok-soft: #e7f2e8;
+        --warn: #8a5a00;
+        --warn-soft: #fdf3dc;
+        --bar: #d8d2c6;
+        --on-accent: #ffffff;
+        --serif: "Newsreader", Georgia, serif;
+        --sans: "Inter", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151412;
+          --surface: #1e1c19;
+          --ink: #ece8e1;
+          --muted: #a8a197;
+          --faint: #7a746b;
+          --line: #322f2a;
+          --accent: #ef7f74;
+          --accent-soft: #3a1f1c;
+          --ok: #8fcf98;
+          --ok-soft: #1d2e20;
+          --warn: #e9b955;
+          --warn-soft: #33290f;
+          --bar: #3d3933;
+          --on-accent: #1d1b18;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 var(--sans);
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 48px 16px 64px;
+      }
+      header h1 {
+        font: 500 clamp(28px, 5vw, 38px)/1.15 var(--serif);
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+      header h1 span {
+        color: var(--accent);
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      form {
+        margin-top: 28px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 84px;
+        resize: vertical;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--ink);
+        font: 400 19px/1.5 var(--serif);
+      }
+      textarea::placeholder {
+        color: var(--faint);
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-top: 10px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+      .controls label {
+        font-size: 13px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      select,
+      input[type="date"] {
+        font: 13px var(--sans);
+        color: var(--ink);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 8px;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--faint);
+        margin-left: auto;
+      }
+      button[type="submit"] {
+        font: 600 14px var(--sans);
+        color: var(--on-accent);
+        background: var(--accent);
+        border: 0;
+        border-radius: 9px;
+        padding: 9px 18px;
+        cursor: pointer;
+      }
+      button[type="submit"]:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      .examples {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .examples button {
+        font: 13px var(--sans);
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+      .examples button:hover {
+        color: var(--ink);
+        border-color: var(--faint);
+      }
+
+      .notice {
+        margin-top: 20px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+      }
+      .notice.error {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .notice.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .notice.setup {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .loading {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 15px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.25;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dot {
+          animation: none;
+        }
+      }
+
+      .answer {
+        margin-top: 32px;
+        font: 400 19px/1.65 var(--serif);
+      }
+      .answer p {
+        margin: 0 0 12px;
+      }
+      .answer ul {
+        margin: 0 0 12px;
+        padding-left: 22px;
+      }
+      .answer li {
+        margin-bottom: 8px;
+      }
+      .cite {
+        font: 500 12px var(--mono);
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-radius: 5px;
+        padding: 1px 5px;
+        text-decoration: none;
+        white-space: nowrap;
+        vertical-align: 1px;
+      }
+      .cite:hover {
+        text-decoration: underline;
+      }
+
+      h2 {
+        font: 600 12px var(--sans);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint);
+        margin: 36px 0 12px;
+      }
+      .sources {
+        display: grid;
+        gap: 10px;
+      }
+      .src {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+        transition:
+          border-color 0.3s,
+          box-shadow 0.3s;
+      }
+      .src.flash {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .src a.title {
+        color: var(--ink);
+        font: 500 17px/1.35 var(--serif);
+        text-decoration: none;
+      }
+      .src a.title:hover {
+        text-decoration: underline;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: center;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .meta .id {
+        font-family: var(--mono);
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .badge.cited {
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
+      .badge.unused {
+        color: var(--faint);
+        border: 1px solid var(--line);
+      }
+      .sim {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .sim .track {
+        width: 60px;
+        height: 4px;
+        background: var(--bar);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .sim .fill {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+      }
+      .stats {
+        margin-top: 24px;
+        font: 12px var(--mono);
+        color: var(--faint);
+      }
+
+      footer {
+        margin-top: 56px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      footer a {
+        color: var(--muted);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>arXiv Research <span>Assistant</span></h1>
+        <p>
+          Ask about recent papers in computational linguistics, AI and
+          information retrieval. Every answer cites the papers it came from.
+        </p>
+      </header>
+
+      <div id="setup" class="notice setup" hidden>
+        Setup needed: paste your API URL into <code>API_URL</code> near the
+        bottom of this file.
+      </div>
+
+      <form id="ask-form">
+        <label for="question" class="sr-only">Your question</label>
+        <textarea
+          id="question"
+          maxlength="500"
+          placeholder="What's new in RAG evaluation?"
+          required
+        ></textarea>
+        <div class="controls">
+          <label
+            >Category
+            <select id="category">
+              <option value="">Any</option>
+              <option value="cs.CL">cs.CL</option>
+              <option value="cs.AI">cs.AI</option>
+              <option value="cs.IR">cs.IR</option>
+              <option value="cs.LG">cs.LG</option>
+            </select>
+          </label>
+          <label>Since <input type="date" id="since" /></label>
+          <span class="count" id="count">0 / 500</span>
+          <button type="submit" id="submit">Ask</button>
+        </div>
+      </form>
+
+      <div class="examples" id="examples">
+        <button type="button">What's new in RAG evaluation?</button>
+        <button type="button">
+          How are agents kept from making bad tool calls?
+        </button>
+        <button type="button">
+          Do language models know when they don't know?
+        </button>
+      </div>
+
+      <div id="status" aria-live="polite"></div>
+      <section id="result" hidden>
+        <div class="answer" id="answer"></div>
+        <div id="warning"></div>
+        <h2 id="sources-heading">Sources</h2>
+        <div class="sources" id="sources"></div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <footer>
+        Answers come only from paper abstracts indexed daily from arXiv,
+        retrieved by meaning and checked so every citation points to a real
+        retrieved paper. They can still be incomplete, so open the papers before
+        relying on them.
+        <br /><a
+          href="https://github.com/VaibhaVarshney/arxiv-research-assistant"
+          >Source code on GitHub</a
+        >
+        · Thank you to arXiv for use of its open access interoperability.
+      </footer>
+    </main>
+
+    <script>
+      // ---- Paste the ApiUrl output from `sam deploy` here ----
+      const API_URL =
+        "https://w54lf5v375.execute-api.us-east-1.amazonaws.com/ask";
+
+      const $ = (id) => document.getElementById(id);
+      const CITATION = /\[(\d{4}\.\d{4,5})\]/;
+      const TOKEN = /(\*\*[^*]+\*\*|\[\d{4}\.\d{4,5}\])/;
+
+      if (!API_URL.startsWith("https://")) $("setup").hidden = false;
+
+      $("question").addEventListener("input", (e) => {
+        $("count").textContent = `${e.target.value.length} / 500`;
+      });
+      $("question").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          $("ask-form").requestSubmit();
+        }
+      });
+      $("examples").addEventListener("click", (e) => {
+        if (e.target.tagName !== "BUTTON") return;
+        $("question").value = e.target.textContent;
+        $("question").dispatchEvent(new Event("input"));
+        $("ask-form").requestSubmit();
+      });
+
+      // Build everything with createElement/textContent, never innerHTML. The answer comes from an LLM
+      // and titles come from arXiv, so treating them as HTML would let injected text run as code (XSS).
+      function el(tag, attrs = {}, ...children) {
+        const node = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (k === "class") node.className = v;
+          else node.setAttribute(k, v);
+        }
+        for (const c of children) node.append(c);
+        return node;
+      }
+
+      function renderInline(text, sourceIds) {
+        const frag = document.createDocumentFragment();
+        for (const part of text.split(TOKEN)) {
+          if (!part) continue;
+          const cite = part.match(CITATION);
+          if (cite && part === cite[0]) {
+            const id = cite[1];
+            const link = el(
+              "a",
+              {
+                class: "cite",
+                href: sourceIds.has(id)
+                  ? `#src-${id}`
+                  : `https://arxiv.org/abs/${id}`,
+              },
+              id,
+            );
+            if (sourceIds.has(id))
+              link.addEventListener("click", (e) => {
+                e.preventDefault();
+                flash(id);
+              });
+            frag.append(link);
+          } else if (part.startsWith("**") && part.endsWith("**")) {
+            frag.append(el("strong", {}, part.slice(2, -2)));
+          } else {
+            frag.append(part);
+          }
+        }
+        return frag;
+      }
+
+      function renderAnswer(text, sourceIds) {
+        const box = $("answer");
+        box.replaceChildren();
+        let list = null;
+        for (const raw of text.split("\n")) {
+          const line = raw.trim();
+          if (!line) {
+            list = null;
+            continue;
+          }
+          const bullet = line.match(/^([-*•]|\d+\.)\s+(.*)$/);
+          if (bullet) {
+            if (!list) {
+              list = el("ul");
+              box.append(list);
+            }
+            list.append(el("li", {}, renderInline(bullet[2], sourceIds)));
+          } else {
+            list = null;
+            box.append(el("p", {}, renderInline(line, sourceIds)));
+          }
+        }
+      }
+
+      function formatDate(n) {
+        const s = String(n);
+        return new Date(
+          `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T12:00:00`,
+        ).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+
+      function sourceCard(s, showCited = true) {
+        const pct = Math.max(0, Math.min(100, Math.round(s.similarity * 100)));
+        const meta = el(
+          "div",
+          { class: "meta" },
+          el("span", { class: "id" }, s.id),
+          el("span", {}, formatDate(s.published_date)),
+          el(
+            "span",
+            {
+              class: "sim",
+              title: "How closely this paper matches your question",
+            },
+            el(
+              "span",
+              { class: "track" },
+              el("span", { class: "fill", style: `width:${pct}%` }),
+            ),
+            `${s.similarity.toFixed(2)}`,
+          ),
+        );
+        if (showCited)
+          meta.append(
+            el(
+              "span",
+              { class: `badge ${s.cited ? "cited" : "unused"}` },
+              s.cited ? "cited" : "not cited",
+            ),
+          );
+        return el(
+          "div",
+          { class: "src", id: `src-${s.id}` },
+          el(
+            "a",
+            { class: "title", href: s.url, target: "_blank", rel: "noopener" },
+            s.title,
+          ),
+          meta,
+        );
+      }
+
+      function flash(id) {
+        const card = $(`src-${id}`);
+        if (!card) return;
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.add("flash");
+        setTimeout(() => card.classList.remove("flash"), 1400);
+      }
+
+      function showStatus(kind, text) {
+        const box = $("status");
+        box.replaceChildren();
+        if (kind === "loading")
+          box.append(
+            el("div", { class: "loading" }, el("span", { class: "dot" }), text),
+          );
+        else if (kind) box.append(el("div", { class: `notice ${kind}` }, text));
+      }
+
+      function render(data) {
+        const sourceIds = new Set(data.sources.map((s) => s.id));
+        renderAnswer(data.answer, sourceIds);
+
+        $("warning").replaceChildren();
+        if (data.invalid_citations?.length) {
+          $("warning").append(
+            el(
+              "div",
+              { class: "notice warn" },
+              `Heads up: the answer cites ${data.invalid_citations.join(", ")}, which was not among the retrieved papers.`,
+            ),
+          );
+        }
+
+        const list = $("sources");
+        list.replaceChildren();
+        if (data.sources.length) {
+          $("sources-heading").textContent =
+            `Sources (${data.sources.filter((s) => s.cited).length} of ${data.sources.length} cited)`;
+          data.sources.forEach((s) => list.append(sourceCard(s)));
+        } else if (data.closest_below_threshold?.length) {
+          $("sources-heading").textContent =
+            "Closest papers (not relevant enough to use)";
+          data.closest_below_threshold.forEach((s) =>
+            list.append(sourceCard(s, false)),
+          );
+        } else {
+          $("sources-heading").textContent = "";
+        }
+
+        const t = data.timings_ms || {},
+          u = data.usage || {};
+        const bits = [
+          `retrieve ${t.retrieve ?? "–"} ms`,
+          `generate ${t.generate ?? "–"} ms`,
+          `total ${t.total ?? "–"} ms`,
+        ];
+        if (u.input_tokens)
+          bits.push(`tokens ${u.input_tokens} in / ${u.output_tokens} out`);
+        bits.push(data.model);
+        $("stats").textContent = bits.join("  ·  ");
+        $("result").hidden = false;
+      }
+
+      $("ask-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const question = $("question").value.trim();
+        if (!question) return;
+        if (!API_URL.startsWith("https://")) {
+          showStatus("error", "The API URL isn't set yet.");
+          return;
+        }
+
+        $("submit").disabled = true;
+        $("result").hidden = true;
+        showStatus("loading", "Searching papers…");
+        const slow = setTimeout(
+          () =>
+            showStatus(
+              "loading",
+              "Reading abstracts and writing an answer… (the first question after a quiet spell takes a few extra seconds)",
+            ),
+          2500,
+        );
+
+        try {
+          const res = await fetch(API_URL, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              question,
+              category: $("category").value || null,
+              since: $("since").value || null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 429)
+            throw new Error(
+              "Lots of questions right now. Wait a few seconds and try again.",
+            );
+          if (!res.ok)
+            throw new Error(
+              data.error || data.message || `Request failed (${res.status}).`,
+            );
+          showStatus(null);
+          render(data);
+        } catch (err) {
+          const msg =
+            err instanceof TypeError
+              ? "Couldn't reach the API. Check your connection and try again."
+              : err.message;
+          showStatus("error", msg);
+        } finally {
+          clearTimeout(slow);
+          $("submit").disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

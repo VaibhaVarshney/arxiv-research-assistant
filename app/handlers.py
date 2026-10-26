@@ -5,6 +5,7 @@ A handler receives (event, context):
   event   = the input (a test event, an S3 notification, an API request...)
   context = info about this invocation (request ID, time remaining, ...)
 """
+import base64
 import json
 import time
 from datetime import datetime, timezone
@@ -59,25 +60,67 @@ def index_handler(event, context):
     return {"files": results}
 
 
+MAX_QUESTION_CHARS = 500
+ALLOWED_CATEGORIES = {"cs.CL", "cs.AI", "cs.IR", "cs.LG"}
+
+
+def _response(status: int, payload: dict) -> dict:
+    return {"statusCode": status, "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(payload)}
+
+
 def _parse_query_event(event) -> dict:
-    """Accept a direct invoke ({"question": ...}) or an API Gateway request (Step 6)."""
-    if isinstance(event.get("body"), str):
-        return json.loads(event["body"] or "{}")
-    return event
+    """Accept a direct invoke ({"question": ...}) or an API Gateway HTTP request."""
+    if "body" not in event:
+        return event
+    body = event.get("body") or "{}"
+    if event.get("isBase64Encoded"):
+        body = base64.b64decode(body).decode("utf-8")
+    return json.loads(body)
+
+
+def _validate(params: dict) -> tuple[dict | None, str | None]:
+    """Never trust input from the internet. Returns (clean_params, error_message)."""
+    question = str(params.get("question") or "").strip()
+    if not question:
+        return None, "question is required"
+    if len(question) > MAX_QUESTION_CHARS:
+        return None, f"question must be under {MAX_QUESTION_CHARS} characters"
+
+    category = params.get("category") or None
+    if category and category not in ALLOWED_CATEGORIES:
+        return None, f"category must be one of {sorted(ALLOWED_CATEGORIES)}"
+
+    since = params.get("since") or None
+    if since:
+        since = str(since).replace("-", "")       # accept 2026-10-15 or 20261015
+        if not (since.isdigit() and len(since) == 8):
+            return None, "since must be a date like 2026-10-15"
+        since = int(since)
+    return {"question": question, "category": category, "since": since}, None
 
 
 def query_handler(event, context):
     from arxiv_rag.graph import run_query   # heavy import, only this function needs it
 
     t0 = time.perf_counter()
-    params = _parse_query_event(event)
-    question = (params.get("question") or "").strip()
-    if not question:
-        return {"statusCode": 400, "body": json.dumps({"error": "question is required"})}
+    try:
+        params = _parse_query_event(event)
+    except (ValueError, UnicodeDecodeError):
+        return _response(400, {"error": "request body must be JSON"})
 
-    result = run_query(question, params.get("category"), params.get("since"))
-    log("query_done", request_id=context.aws_request_id, question=question,
+    clean, error = _validate(params)
+    if error:
+        return _response(400, {"error": error})
+
+    try:
+        result = run_query(clean["question"], clean["category"], clean["since"])
+    except Exception as e:
+        # Log the details for you; give the public a generic message (no internals leaked).
+        log("query_failed", request_id=context.aws_request_id, error=repr(e))
+        return _response(500, {"error": "Something went wrong answering that. Please try again."})
+
+    log("query_done", request_id=context.aws_request_id, question=clean["question"],
         n_sources=len(result["sources"]), invalid_citations=result["invalid_citations"],
         handler_ms=round((time.perf_counter() - t0) * 1000), **result["timings_ms"], **result["usage"])
-    return {"statusCode": 200, "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(result)}
+    return _response(200, result)
