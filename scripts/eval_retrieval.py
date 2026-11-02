@@ -5,6 +5,10 @@ Step 1b: measure retrieval quality, so every Phase 2 change is proven, not guess
     python scripts/eval_retrieval.py evals/retrieval_v1.jsonl --mode rerank
     python scripts/eval_retrieval.py evals/retrieval_v1.jsonl --mode vector --k 50   # reranker's ceiling
 
+Modes:  vector | bm25 | hybrid (vector+bm25, RRF) | rerank (vector -> rerank)
+        hybrid_rerank (vector+bm25 -> RRF -> rerank: the Step 3 production pipeline)
+BM25 modes need the local index first:  python scripts/build_bm25.py
+
 Metrics (higher is better unless noted):
   hit@1      did the right paper come first?
   recall@5   share of relevant papers that made the top 5 (what the LLM sees)
@@ -14,10 +18,20 @@ Metrics (higher is better unless noted):
              "everything scores 0.42-0.47" problem shows up in.
   spread     top-1 score minus top-5 score. Small spread = scores are bunched.
 
+Question types: "specific" (one paper, paraphrased), "broad" (many papers),
+"keyword" (uses the paper's own name or term, the case BM25 is built for),
+and "none".
+
 Questions with "type": "none" have no answer in the index (off-topic on purpose).
 They don't count toward the metrics above. Instead the script compares the top
 score on those against the best relevant score on real questions, which tells
 you where to set the "is this relevant enough to answer?" threshold.
+
+Snapshot: the live index grows every night, and new (unjudged) papers can push labelled
+ones down, so scores drift even when nothing changed in the code. If evals/snapshot_ids.txt
+exists, any paper not in it is dropped from results before scoring, so the eval always
+judges the same corpus the labels were made against. Create it once with:
+    python scripts/eval_snapshot.py
 
 Each run is saved to evals/results/ so you can compare modes side by side.
 """
@@ -30,7 +44,7 @@ from pathlib import Path
 
 from arxiv_rag.config import RERANK_CANDIDATES
 from arxiv_rag.rerank import rerank as rerank_hits
-from arxiv_rag.retrieval import search
+from arxiv_rag.retrieval import bm25_search, hybrid_search, search
 
 
 # ---- Retrievers. Each returns [(paper_id, score), ...] best first.
@@ -46,7 +60,21 @@ def rerank(question: str, k: int) -> list[tuple[str, float]]:
     return [(h["key"], h["rerank_score"]) for h in rerank_hits(question, candidates, k)]
 
 
-RETRIEVERS = {"vector": vector, "rerank": rerank}
+def bm25(question: str, k: int) -> list[tuple[str, float]]:
+    return bm25_search(question, k)
+
+
+def hybrid(question: str, k: int) -> list[tuple[str, float]]:
+    return [(h["key"], h["rrf_score"]) for h in hybrid_search(question, k)]
+
+
+def hybrid_rerank(question: str, k: int) -> list[tuple[str, float]]:
+    candidates = hybrid_search(question, RERANK_CANDIDATES)
+    return [(h["key"], h["rerank_score"]) for h in rerank_hits(question, candidates, k)]
+
+
+RETRIEVERS = {"vector": vector, "bm25": bm25, "hybrid": hybrid, "rerank": rerank,
+              "hybrid_rerank": hybrid_rerank}
 
 
 def score_one(ranked: list[tuple[str, float]], relevant: set[str]) -> dict:
@@ -94,7 +122,13 @@ parser.add_argument("evalset")
 parser.add_argument("--mode", default="vector", choices=sorted(RETRIEVERS))
 parser.add_argument("--k", type=int, default=20,
                     help="how deep to look for the relevant paper")
+parser.add_argument("--snapshot", default="evals/snapshot_ids.txt",
+                    help="file of arXiv IDs the labels were made against ('' to disable)")
 args = parser.parse_args()
+
+snapshot = None
+if args.snapshot and Path(args.snapshot).exists():
+    snapshot = set(Path(args.snapshot).read_text().split())
 
 questions = load(args.evalset)
 if not questions:
@@ -106,6 +140,8 @@ results, latencies = [], []
 for q in questions:
     t0 = time.perf_counter()
     ranked = retrieve(q["question"], args.k)
+    if snapshot:
+        ranked = [(pid, s) for pid, s in ranked if pid in snapshot]
     latencies.append((time.perf_counter() - t0) * 1000)
     results.append({"id": q["id"], "type": q.get("type", "specific"), "question": q["question"],
                     **score_one(ranked, set(q["relevant"]))})
@@ -120,7 +156,7 @@ for r in results:
 
 summary = {}
 answerable = [r for r in results if r["type"] != "none"]
-for group in ["all", "specific", "broad"]:
+for group in ["all", "specific", "broad", "keyword"]:
     rows = answerable if group == "all" else [
         r for r in results if r["type"] == group]
     if rows:
@@ -142,9 +178,9 @@ if negatives and positives:
         if max(negatives) < positives[0] else None,
     }
 
-print(f"\nmode={args.mode}  k={args.k}")
+print(f"\nmode={args.mode}  k={args.k}  snapshot={len(snapshot) if snapshot else 'off'} papers")
 for group, s in summary.items():
-    if group in ("all", "specific", "broad"):
+    if group in ("all", "specific", "broad", "keyword"):
         print(f"  {group:<9} n={s['n']:<3} hit@1={s['hit@1']}  recall@5={s['recall@5']}  "
               f"mrr={s['mrr']}  found@{args.k}={s['found']}  margin={s['margin']}  spread={s['spread']}")
 print(f"  median latency {summary['median_latency_ms']} ms")

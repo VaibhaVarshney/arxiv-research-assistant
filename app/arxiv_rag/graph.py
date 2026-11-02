@@ -4,9 +4,11 @@ The RAG pipeline as a LangGraph graph.
     START -> retrieve --(enough evidence?)--> generate -> check_citations -> END
                      \\--(no)--> no_evidence -> END
 
-Phase 2: retrieve is now two-stage. Vector search casts a wide net (50 papers),
-then the reranker re-scores them and we keep the ones above MIN_RELEVANCE.
-If the reranker is down, we fall back to plain vector search so the API still answers.
+Phase 2: retrieve is now multi-stage.
+    Step 3: hybrid search casts the net. Vector top 50 + BM25 top 50, fused with RRF.
+    Step 2: the reranker re-scores the fused 50; we keep those above MIN_RELEVANCE.
+If the reranker is down, we fall back to the vector hits with the cosine floor, so the
+API still answers (BM25-only hits have no comparable score, so they're dropped then).
 """
 import re
 import time
@@ -15,10 +17,10 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from .config import (CANDIDATES_K, LLM_MODEL_ID, MAX_SOURCES, MIN_RELEVANCE, MIN_SIMILARITY,
-                     RERANK_CANDIDATES, USE_RERANK, log)
+                     RERANK_CANDIDATES, USE_HYBRID, USE_RERANK, log)
 from .llm import generate_answer
 from .rerank import rerank
-from .retrieval import search
+from .retrieval import hybrid_search, search
 
 CITATION_PATTERN = re.compile(r"\[(\d{4}\.\d{4,5})\]")
 
@@ -37,8 +39,18 @@ class RAGState(TypedDict, total=False):
     reranked: bool
 
 
-def _similarity(hit: dict) -> float:
-    return 1 - hit["distance"]
+def _similarity(hit: dict) -> float | None:
+    # BM25-only hits have no cosine score
+    return 1 - hit["distance"] if "distance" in hit else None
+
+
+def _gather(q, cat, since, k):
+    if USE_HYBRID:
+        try:
+            return hybrid_search(q, k, cat, since)
+        except Exception as e:
+            log("hybrid_failed", error=repr(e))
+    return search(q, k, cat, since)
 
 
 def retrieve(state: RAGState) -> RAGState:
@@ -46,7 +58,7 @@ def retrieve(state: RAGState) -> RAGState:
     q, cat, since = state["question"], state.get(
         "category"), state.get("since")
     if USE_RERANK:
-        candidates = search(q, RERANK_CANDIDATES, cat, since)
+        candidates = _gather(q, cat, since, RERANK_CANDIDATES)
         t_search = round((time.perf_counter() - t0) * 1000)
         try:
             ranked = rerank(q, candidates, MAX_SOURCES)
@@ -59,7 +71,8 @@ def retrieve(state: RAGState) -> RAGState:
             log("rerank_failed", error=repr(e))
     else:
         candidates = search(q, CANDIDATES_K, cat, since)
-    candidates = candidates[:CANDIDATES_K]
+    candidates = sorted((c for c in candidates if "distance" in c),
+                        key=lambda c: c["distance"])[:CANDIDATES_K]
     sources = [c for c in candidates if _similarity(
         c) >= MIN_SIMILARITY][:MAX_SOURCES]
     return {"candidates": candidates, "sources": sources, "reranked": False,
@@ -126,7 +139,9 @@ def run_query(question: str, category: str | None = None, since: int | None = No
         m = hit["metadata"]
         return {"id": hit["key"], "title": m["title"], "url": m["abs_url"],
                 "published_date": m["published_date"],
-                "similarity": round(_similarity(hit), 3),
+                "similarity": round(_similarity(hit), 3) if "distance" in hit else None,
+                "found_by": [name for name, key in (("vector", "vector_rank"), ("bm25", "bm25_rank"))
+                             if hit.get(key)] or None,
                 "relevance": round(hit["rerank_score"], 3) if "rerank_score" in hit else None,
                 "cited": hit["key"] in cited}
 

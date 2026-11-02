@@ -5,3 +5,4 @@ data/
 .env
 .aws-sam/
 *.egg-info/
+evals/results/

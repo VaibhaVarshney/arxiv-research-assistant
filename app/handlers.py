@@ -13,19 +13,21 @@ from urllib.parse import unquote_plus
 
 from arxiv_rag.arxiv_client import fetch_papers
 from arxiv_rag.config import RAW_BUCKET, log, s3
-from arxiv_rag.indexer import index_papers
+from arxiv_rag.indexer import index_papers, rebuild_bm25
 
 
 def fetch_handler(event, context):
     """Pull recent abstracts from arXiv and save them as one JSONL file in S3."""
     event = event or {}
-    days = int(event.get("days", 2))          # 2-day window overlaps safely: re-runs are idempotent
+    # 2-day window overlaps safely: re-runs are idempotent
+    days = int(event.get("days", 2))
     max_papers = int(event.get("max", 1000))
 
     papers = fetch_papers(days=days, max_papers=max_papers)
     if not papers:
         # Nothing new (e.g. a weekend). Writing an empty file would trigger a pointless index run.
-        log("fetch_skipped", request_id=context.aws_request_id, reason="no papers", days=days)
+        log("fetch_skipped", request_id=context.aws_request_id,
+            reason="no papers", days=days)
         return {"bucket": RAW_BUCKET, "key": None, "papers": 0}
 
     now = datetime.now(timezone.utc)
@@ -48,7 +50,15 @@ def _keys_from_event(event) -> list[tuple[str, str]]:
 
 
 def index_handler(event, context):
-    """Read a JSONL file from S3, embed every paper, upsert into S3 Vectors."""
+    """Read a JSONL file from S3, embed every paper, upsert into S3 Vectors, then rebuild BM25.
+
+    Manual rebuild of just the keyword index:  {"rebuild_bm25": true}
+    """
+    if event.get("rebuild_bm25") and "key" not in event:
+        stats = rebuild_bm25(bucket=RAW_BUCKET)
+        log("bm25_rebuilt", request_id=context.aws_request_id, **stats)
+        return stats
+
     results = []
     for bucket, key in _keys_from_event(event):
         obj = s3.get_object(Bucket=bucket, Key=key)
@@ -57,6 +67,12 @@ def index_handler(event, context):
         stats = index_papers(papers)
         log("index_done", request_id=context.aws_request_id, key=key, **stats)
         results.append({"key": key, **stats})
+
+    # Keep keyword search in sync with the vector index. Skipped when nothing new was indexed.
+    if any(r["papers_indexed"] for r in results):
+        stats = rebuild_bm25(bucket=RAW_BUCKET)
+        log("bm25_rebuilt", request_id=context.aws_request_id, **stats)
+        return {"files": results, **stats}
     return {"files": results}
 
 
@@ -93,7 +109,8 @@ def _validate(params: dict) -> tuple[dict | None, str | None]:
 
     since = params.get("since") or None
     if since:
-        since = str(since).replace("-", "")       # accept 2026-10-15 or 20261015
+        # accept 2026-10-15 or 20261015
+        since = str(since).replace("-", "")
         if not (since.isdigit() and len(since) == 8):
             return None, "since must be a date like 2026-10-15"
         since = int(since)
@@ -101,7 +118,8 @@ def _validate(params: dict) -> tuple[dict | None, str | None]:
 
 
 def query_handler(event, context):
-    from arxiv_rag.graph import run_query   # heavy import, only this function needs it
+    # heavy import, only this function needs it
+    from arxiv_rag.graph import run_query
 
     t0 = time.perf_counter()
     try:
@@ -114,7 +132,8 @@ def query_handler(event, context):
         return _response(400, {"error": error})
 
     try:
-        result = run_query(clean["question"], clean["category"], clean["since"])
+        result = run_query(clean["question"],
+                           clean["category"], clean["since"])
     except Exception as e:
         # Log the details for you; give the public a generic message (no internals leaked).
         log("query_failed", request_id=context.aws_request_id, error=repr(e))

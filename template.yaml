@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: arXiv research assistant - Phase 2 (daily ingestion, reranked query API, web UI)
+Description: arXiv research assistant - Phase 2 (daily ingestion, hybrid + reranked query API, web UI)
 
 Parameters:
   VectorBucketName:
@@ -105,8 +105,14 @@ Resources:
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
             - Effect: Allow
               # GetVectors lets us check which papers are already indexed before embedding.
-              Action: [s3vectors:PutVectors, s3vectors:GetVectors]
+              # ListVectors reads every paper to rebuild the BM25 keyword index (Step 3).
+              Action: [s3vectors:PutVectors, s3vectors:GetVectors, s3vectors:ListVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
+            - Effect: Allow
+              # Write the BM25 index. Scoped to bm25/ so this can't overwrite raw files.
+              # (bm25/ doesn't match the raw/*.jsonl trigger, so writing it won't re-run this function.)
+              Action: s3:PutObject
+              Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}/bm25/*"
       EventInvokeConfig:
         MaximumRetryAttempts: 2
         DestinationConfig:
@@ -136,6 +142,9 @@ Resources:
       Environment:
         Variables:
           USE_RERANK: "true"     # set to "false" to roll back to Phase 1 vector-only retrieval
+          # Off after Step 3's eval: hybrid tied rerank-only (1 question of 40 improved, +300 ms).
+          # The BM25 index still rebuilds nightly, so flipping this to "true" is all it takes.
+          USE_HYBRID: "false"
           MIN_RELEVANCE: !Ref MinRelevance
       Events:
         Ask:
@@ -161,6 +170,10 @@ Resources:
             - Effect: Allow
               Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
+            - Effect: Allow
+              # Read the BM25 index (GetObject also covers the HeadObject freshness check).
+              Action: s3:GetObject
+              Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}/bm25/*"
 
   # ---------------------------------------------------------------- Public API
   Api:

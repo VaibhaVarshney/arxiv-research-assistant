@@ -20,8 +20,9 @@ def show(r: dict):
     if r["sources"]:
         print(f"\nSources ({key} >= {floor}):")
         for s in r["sources"]:
+            via = "+".join(s.get("found_by") or []) or "-"
             print(
-                f"  [{s['id']}] {s[key]:.3f}  {s['title'][:70]}  ({'cited' if s['cited'] else 'not cited'})")
+                f"  [{s['id']}] {s[key]:.3f}  {s['title'][:62]}  ({'cited' if s['cited'] else 'not cited'}, via {via})")
     else:
         print("\nClosest papers (all below threshold):")
         for s in r["closest_below_threshold"]:

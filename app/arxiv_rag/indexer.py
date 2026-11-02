@@ -60,14 +60,16 @@ def select_new(papers: list[dict], already: dict[str, int]) -> list[dict]:
 
 def _flush(batch: list[dict]):
     if batch:
-        s3vectors.put_vectors(vectorBucketName=VECTOR_BUCKET, indexName=INDEX_NAME, vectors=batch)
+        s3vectors.put_vectors(vectorBucketName=VECTOR_BUCKET,
+                              indexName=INDEX_NAME, vectors=batch)
 
 
 def index_papers(papers: list[dict], skip_existing: bool = True, progress_every: int = 0) -> dict:
     start = time.time()
     to_embed = papers
     if skip_existing and papers:
-        to_embed = select_new(papers, existing_versions([p["arxiv_id"] for p in papers]))
+        to_embed = select_new(papers, existing_versions(
+            [p["arxiv_id"] for p in papers]))
 
     batch, tokens = [], 0
     for i, paper in enumerate(to_embed, 1):
@@ -101,7 +103,43 @@ def ensure_index():
                 raise
             log("already_exists", resource=label)
 
-    create(VECTOR_BUCKET, s3vectors.create_vector_bucket, vectorBucketName=VECTOR_BUCKET)
+    create(VECTOR_BUCKET, s3vectors.create_vector_bucket,
+           vectorBucketName=VECTOR_BUCKET)
     create(INDEX_NAME, s3vectors.create_index, vectorBucketName=VECTOR_BUCKET, indexName=INDEX_NAME,
            dataType="float32", dimension=EMBED_DIM, distanceMetric="cosine",
            metadataConfiguration={"nonFilterableMetadataKeys": NON_FILTERABLE_KEYS})
+
+
+# ------------------------------------------------------------------ BM25 (Phase 2, Step 3)
+def all_paper_metadata() -> list[dict]:
+    """Every indexed paper's key + metadata. S3 Vectors is the source of truth for what's indexed."""
+    papers, token = [], None
+    while True:
+        params = {"vectorBucketName": VECTOR_BUCKET, "indexName": INDEX_NAME,
+                  "maxResults": 1000, "returnMetadata": True}
+        if token:
+            params["nextToken"] = token
+        resp = s3vectors.list_vectors(**params)
+        papers += [{"key": v["key"], **(v.get("metadata") or {})}
+                   for v in resp.get("vectors", [])]
+        token = resp.get("nextToken")
+        if not token:
+            return papers
+
+
+def rebuild_bm25(bucket: str | None = None, local_path: str | None = None) -> dict:
+    """Rebuild the whole keyword index from S3 Vectors. Full rebuild = no drift, and it's cheap."""
+    from .bm25 import build_index, to_bytes
+    from .config import BM25_KEY, s3
+    start = time.time()
+    papers = all_paper_metadata()
+    blob = to_bytes(build_index(papers))
+    if bucket:
+        s3.put_object(Bucket=bucket, Key=BM25_KEY, Body=blob,
+                      ContentType="application/gzip")
+    if local_path:
+        from pathlib import Path
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(local_path).write_bytes(blob)
+    return {"bm25_papers": len(papers), "bm25_bytes": len(blob),
+            "bm25_seconds": round(time.time() - start, 1)}

@@ -26,8 +26,19 @@ MAX_OUTPUT_TOKENS = 2048
 # Reranker (Phase 2, Step 2). Cohere Rerank 3.5 is the only Bedrock reranker in us-east-1.
 RERANK_MODEL_ID = os.getenv("RERANK_MODEL_ID", "cohere.rerank-v3-5:0")
 RERANK_MODEL_ARN = f"arn:aws:bedrock:{REGION}::foundation-model/{RERANK_MODEL_ID}"
-# how many vector hits the reranker re-scores
+# how many candidates the reranker re-scores
 RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "50"))
+
+# Hybrid search (Phase 2, Step 3)
+USE_HYBRID = os.getenv("USE_HYBRID", "false").lower(
+) == "true"   # off by default: see Step 3 eval
+# take this many from vector AND from BM25 before fusing
+HYBRID_EACH = int(os.getenv("HYBRID_EACH", "50"))
+# standard Reciprocal Rank Fusion constant
+RRF_K = 60
+BM25_KEY = "bm25/index.json.gz"                     # in RAW_BUCKET (Lambda)
+BM25_LOCAL_PATH = os.getenv(
+    "BM25_LOCAL_PATH", "data/bm25_index.json.gz")   # on your laptop
 
 # arXiv
 CATEGORIES = ["cs.CL", "cs.AI", "cs.IR"]
