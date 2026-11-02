@@ -9,8 +9,9 @@ import time
 
 from botocore.exceptions import ClientError
 
-from .config import (EMBED_DIM, EMBED_PRICE_PER_1K_TOKENS, INDEX_NAME,
-                     NON_FILTERABLE_KEYS, VECTOR_BUCKET, log, s3vectors)
+from .config import (CHUNK_INDEX_NAME, CHUNK_NON_FILTERABLE_KEYS, EMBED_DIM,
+                     EMBED_PRICE_PER_1K_TOKENS, INDEX_NAME, NON_FILTERABLE_KEYS, VECTOR_BUCKET,
+                     log, s3vectors)
 from .embeddings import embed, paper_to_text
 
 BATCH_SIZE = 100          # PutVectors accepts up to 500; GetVectors up to 100
@@ -83,6 +84,8 @@ def index_papers(papers: list[dict], skip_existing: bool = True, progress_every:
             print(f"  embedded {i}/{len(to_embed)}")
     _flush(batch)
     return {
+        # handler pops this and queues them for full text (Step 4)
+        "new_papers": to_embed,
         "papers_seen": len(papers),
         "skipped_existing": len(papers) - len(to_embed),
         "papers_indexed": len(to_embed),
@@ -108,6 +111,11 @@ def ensure_index():
     create(INDEX_NAME, s3vectors.create_index, vectorBucketName=VECTOR_BUCKET, indexName=INDEX_NAME,
            dataType="float32", dimension=EMBED_DIM, distanceMetric="cosine",
            metadataConfiguration={"nonFilterableMetadataKeys": NON_FILTERABLE_KEYS})
+    # Step 4: one vector per full-text chunk. arxiv_id stays filterable so 4c can search
+    # "only inside these 5 papers"; the chunk text itself is non-filterable (up to 40 KB).
+    create(CHUNK_INDEX_NAME, s3vectors.create_index, vectorBucketName=VECTOR_BUCKET,
+           indexName=CHUNK_INDEX_NAME, dataType="float32", dimension=EMBED_DIM, distanceMetric="cosine",
+           metadataConfiguration={"nonFilterableMetadataKeys": CHUNK_NON_FILTERABLE_KEYS})
 
 
 # ------------------------------------------------------------------ BM25 (Phase 2, Step 3)

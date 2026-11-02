@@ -12,6 +12,7 @@ dependencies = [
     "feedparser>=6.0",
     "boto3>=1.40",
     "langgraph>=1.0",
+    "beautifulsoup4>=4.12",
 ]
 
 # The package lives in app/ (where Lambda needs it). This tells pip where to find it.

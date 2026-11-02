@@ -15,6 +15,10 @@ REGION = os.getenv("AWS_REGION", "us-east-1")
 # Storage
 VECTOR_BUCKET = os.getenv("VECTOR_BUCKET", "vv-arxiv-vectors")
 INDEX_NAME = os.getenv("VECTOR_INDEX", "abstracts-v1")
+# Phase 2, Step 4: full-text chunks
+CHUNK_INDEX_NAME = os.getenv("CHUNK_INDEX", "chunks-v1")
+FULLTEXT_QUEUE_URL = os.getenv(
+    "FULLTEXT_QUEUE_URL")          # only set in Lambda
 RAW_BUCKET = os.getenv("RAW_BUCKET")            # only set in Lambda
 
 # Models
@@ -53,6 +57,7 @@ MIN_RELEVANCE = float(os.getenv("MIN_RELEVANCE", "0.15"))
 CANDIDATES_K = 8
 MAX_SOURCES = 5
 NON_FILTERABLE_KEYS = ["title", "abstract", "authors", "abs_url"]
+CHUNK_NON_FILTERABLE_KEYS = ["title", "section", "text"]
 
 # Clients are created once when the module loads. In Lambda that means once per
 # container, then reused by every warm invocation (faster than creating per call).
@@ -65,6 +70,7 @@ s3 = boto3.client("s3", region_name=REGION, config=_aws_config)
 # The Rerank API lives in bedrock-agent-runtime, not bedrock-runtime.
 bedrock_agent = boto3.client(
     "bedrock-agent-runtime", region_name=REGION, config=_aws_config)
+sqs = boto3.client("sqs", region_name=REGION, config=_aws_config)
 
 
 def log(event: str, **fields):

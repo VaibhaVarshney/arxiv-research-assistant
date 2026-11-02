@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: arXiv research assistant - Phase 2 (daily ingestion, hybrid + reranked query API, web UI)
+Description: arXiv research assistant - Phase 2 (daily ingestion, full text, reranked query API, web UI)
 
 Parameters:
   VectorBucketName:
@@ -9,6 +9,10 @@ Parameters:
   VectorIndexName:
     Type: String
     Default: abstracts-v1
+  ChunkIndexName:
+    Type: String
+    Default: chunks-v1
+    Description: S3 Vectors index holding full-text chunks (create it with scripts/index.py --setup)
   LlmModelId:
     Type: String
     Default: us.amazon.nova-2-lite-v1:0
@@ -37,6 +41,7 @@ Globals:
       Variables:
         VECTOR_BUCKET: !Ref VectorBucketName
         VECTOR_INDEX: !Ref VectorIndexName
+        CHUNK_INDEX: !Ref ChunkIndexName
         LLM_MODEL_ID: !Ref LlmModelId
         CONTACT_EMAIL: !Ref ContactEmail
         # Built from a fixed pattern instead of !Ref RawBucket. The bucket's S3 trigger points
@@ -113,6 +118,18 @@ Resources:
               # (bm25/ doesn't match the raw/*.jsonl trigger, so writing it won't re-run this function.)
               Action: s3:PutObject
               Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}/bm25/*"
+            - Effect: Allow
+              # Backfill checks which papers already have full text (status files).
+              Action: s3:ListBucket
+              Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}"
+              Condition:
+                StringLike:
+                  s3:prefix: "fulltext/status/*"
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt FullTextQueue.QueueName
+      Environment:
+        Variables:
+          FULLTEXT_QUEUE_URL: !Ref FullTextQueue
       EventInvokeConfig:
         MaximumRetryAttempts: 2
         DestinationConfig:
@@ -174,6 +191,84 @@ Resources:
               # Read the BM25 index (GetObject also covers the HeadObject freshness check).
               Action: s3:GetObject
               Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}/bm25/*"
+
+  # ---------------------------------------------------------------- 4) Full text (Step 4b)
+  # The Index Lambda queues new papers here. A scheduled worker drains it politely:
+  # one arXiv page every 15 s (robots.txt Crawl-delay), ~50 papers per 15-minute run.
+  FullTextQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300            # matches VISIBILITY_S in fulltext_worker.py
+      MessageRetentionPeriod: 1209600   # 14 days: plenty for the ~16 h backfill
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FullTextDLQ.Arn
+        maxReceiveCount: 3              # 3 failed attempts -> dead-letter queue, not an endless loop
+
+  FullTextDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  FullTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.fulltext_handler
+      Timeout: 840                     # 14 min: always ends before the next 15-min run starts
+      MemorySize: 512
+      Environment:
+        Variables:
+          FULLTEXT_QUEUE_URL: !Ref FullTextQueue
+      LoggingConfig:
+        LogGroup: !Ref FullTextLogs
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt FullTextQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
+            - Effect: Allow
+              Action: [s3vectors:PutVectors, s3vectors:DeleteVectors]
+              Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${ChunkIndexName}"
+            - Effect: Allow
+              # Raw HTML cache + per-paper status files.
+              Action: [s3:GetObject, s3:PutObject]
+              Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}/fulltext/*"
+            - Effect: Allow
+              # Lets GetObject on a missing key return 404 (not 403), so "not cached yet" is detectable.
+              Action: s3:ListBucket
+              Resource: !Sub "arn:aws:s3:::arxiv-rag-raw-${AWS::AccountId}"
+              Condition:
+                StringLike:
+                  s3:prefix: "fulltext/*"
+      # Never retry or overlap: the next scheduled run simply picks up where this one stopped.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+      Events:
+        Drain:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: "rate(15 minutes)"
+            RetryPolicy:
+              MaximumRetryAttempts: 0
+
+  # Emails you if any paper fails 3 times (it waits in the DLQ for inspection / replay).
+  FullTextDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A paper failed full-text processing 3 times. Check FullTextDLQ.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt FullTextDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
 
   # ---------------------------------------------------------------- Public API
   Api:
@@ -241,6 +336,11 @@ Resources:
     Properties:
       LogGroupName: /arxiv-rag/query
       RetentionInDays: 14
+  FullTextLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /arxiv-rag/fulltext
+      RetentionInDays: 14
 
 Outputs:
   RawBucketName:
@@ -253,6 +353,10 @@ Outputs:
     Value: !Ref QueryFunction
   FailedRunsQueueUrl:
     Value: !Ref FailedRunsQueue
+  FullTextFunctionName:
+    Value: !Ref FullTextFunction
+  FullTextQueueUrl:
+    Value: !Ref FullTextQueue
   ApiUrl:
     Description: Paste this into docs/index.html as API_URL
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/ask"

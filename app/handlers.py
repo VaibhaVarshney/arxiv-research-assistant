@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from urllib.parse import unquote_plus
 
 from arxiv_rag.arxiv_client import fetch_papers
-from arxiv_rag.config import RAW_BUCKET, log, s3
+from arxiv_rag.config import FULLTEXT_QUEUE_URL, RAW_BUCKET, log, s3
 from arxiv_rag.indexer import index_papers, rebuild_bm25
 
 
@@ -53,10 +53,16 @@ def index_handler(event, context):
     """Read a JSONL file from S3, embed every paper, upsert into S3 Vectors, then rebuild BM25.
 
     Manual rebuild of just the keyword index:  {"rebuild_bm25": true}
+    Queue every indexed paper that has no full text yet (Step 4 backfill):  {"backfill_fulltext": true}
     """
     if event.get("rebuild_bm25") and "key" not in event:
         stats = rebuild_bm25(bucket=RAW_BUCKET)
         log("bm25_rebuilt", request_id=context.aws_request_id, **stats)
+        return stats
+    if event.get("backfill_fulltext") and "key" not in event:
+        from arxiv_rag.fulltext_worker import backfill
+        stats = backfill()
+        log("fulltext_backfill_queued", request_id=context.aws_request_id, **stats)
         return stats
 
     results = []
@@ -65,6 +71,10 @@ def index_handler(event, context):
         lines = obj["Body"].read().decode("utf-8").splitlines()
         papers = [json.loads(line) for line in lines if line.strip()]
         stats = index_papers(papers)
+        new_papers = stats.pop("new_papers", [])
+        if new_papers and FULLTEXT_QUEUE_URL:
+            from arxiv_rag.fulltext_worker import enqueue
+            stats["fulltext_queued"] = enqueue(new_papers)
         log("index_done", request_id=context.aws_request_id, key=key, **stats)
         results.append({"key": key, **stats})
 
@@ -74,6 +84,14 @@ def index_handler(event, context):
         log("bm25_rebuilt", request_id=context.aws_request_id, **stats)
         return {"files": results, **stats}
     return {"files": results}
+
+
+def fulltext_handler(event, context):
+    """Scheduled every 15 min: fetch + chunk + embed papers from the full-text queue (Step 4b)."""
+    from arxiv_rag.fulltext_worker import run_worker
+    stats = run_worker(context.get_remaining_time_in_millis)
+    log("fulltext_run", request_id=context.aws_request_id, **stats)
+    return stats
 
 
 MAX_QUESTION_CHARS = 500

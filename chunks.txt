@@ -1,0 +1,321 @@
+
+--- 2610.31314#000  [1 Introduction]  1458 chars
+Instruction-following evaluation usually asks whether a model can satisfy a constraint in one interaction or within a short task-oriented exchange. This setting is too weak for deployed assistants that must preserve goals, preferences, safety boundaries, and formatting requirements across many turns. A model that can restate a constraint but no longer applies it presents a dangerous failure mode: the user sees evidence of memory but receives behavior that violates the remembered state.
+
+We call this failure State Integrity Collapse (SIC). SIC differs from ordinary forgetting. Forgetting means the model cannot recover a prior constraint; SIC means the model recovers it under probe but fails to make it govern the next answer. The distinction matters for mitigation. Retrieval, memory summarization, or longer context windows may help when state is inaccessible, but they do not directly solve failures of state application.
+
+The practical stakes are high. Consider a medical assistant instructed to avoid recommending medications contraindicated for a patient’s condition, or a legal assistant bound by a confidentiality constraint. If the model can restate the rule when asked but violates it in the next response, the failure is invisible to standard evaluation yet potentially harmful in deployment. SIC captures exactly this class of failure: the model’s declarative knowledge and its generative behavior become decoupled as dialogue state grows.
+
+--- 2610.31314#001  [1 Introduction]  811 chars
+We contribute a compact benchmark and analysis protocol for measuring this gap. StateTrack-Bench creates conversations that introduce one persistent constraint and later require the model to obey it under increasing dialogue depth. Constraints cover symbolic and semantic categories: numerical constraints, format constraints, role/persona constraints, factual-memory bindings, and logical rules. We evaluate seven model snapshots at five dialogue-depth probes using deterministic decoding and fixed judge prompts. The core benchmark contains 125 scenario-depth probes per model (25 per category), yielding 875 primary scored outputs across all models. Extended pilots at depths up to 50 turns and in two additional languages (Chinese, Japanese) test whether the same diagnosis appears outside the core setting.
+
+--- 2610.31314#002  [1 Introduction]  1277 chars
+Our findings are threefold. First, strict joint retention varies substantially by model: overall scores range from 62.4% to 100.0%, and the most dramatic decay is driven by Gemini-3.1-Pro . Second, symbolic constraints are more brittle than semantic memory: logical-rule and format constraints degrade faster than factual-memory bindings. Third, turn depth exposes behavior that aggregate instruction-following scores hide: some models remain stable, whereas others lose 10 points from early to late turns. Critically, 88.6% of observed failures are integrity failures —cases where the model can recall the constraint but fails to enforce it—rather than memory failures where the constraint is genuinely lost; this remains 84.4% when Gemini-3.1-Pro is excluded. Extended-depth and cross-lingual pilots are therefore treated as supporting evidence, not as a claim that all current LLMs collapse uniformly.
+
+These findings complement work on instruction following, dialogue benchmarks, long-context position effects, and persistent-instruction compliance in safety settings Jiang et al. (2024) ; Qin et al. (2024) ; Budzianowski et al. (2018) ; Rastogi et al. (2020) ; Liu et al. (2024) . The benchmark, evaluation code, and all model logs are released to facilitate replication.
+
+--- 2610.31314#003  [2 Related Work > Instruction following and dialogue evaluation.]  1143 chars
+Instruction-following benchmarks have grown beyond simple prompt adherence to multi-constraint and adversarial settings Zhou et al. (2023) ; Jiang et al. (2024) ; Qin et al. (2024) . Task-oriented dialogue corpora such as MultiWOZ and SGD evaluate slot tracking and policy decisions Budzianowski et al. (2018) ; Rastogi et al. (2020) , but their state schema is usually explicit and short-horizon. Our setting instead targets free-form assistant behavior where a natural-language constraint must remain active across turns. The key structural difference is that slot-filling operates over a closed, task-specific ontology (e.g., hotel name, check-in date), whereas our constraints are open-domain and linguistically heterogeneous, spanning format, style, content, and persona requirements that do not reduce to discrete slot values. Moreover, DST benchmarks treat state tracking as a standalone sub-task evaluated with gold dialogue history, whereas our design requires the model to both maintain constraint recall and simultaneously enforce compliance in generated output—a joint generative demand that DST pipelines separate by construction.
+
+--- 2610.31314#004  [2 Related Work > Long-context degradation.]  1214 chars
+Long-context work has shown that information in the middle of a prompt is harder to use than information near the beginning or end Liu et al. (2024) . We extend this perspective from retrieval to compliance: the relevant information may still be verbally recoverable, yet fail to control generation. This makes SIC a state-application problem rather than merely a context-access problem. RULER extends needle-in-a-haystack evaluation with tracing and aggregation tasks, while L-Eval combines long-document question answering with open-ended generation evaluation Hsieh et al. (2024) ; An et al. (2024) . These benchmarks test whether models can retrieve and use information over long contexts, a necessary but not sufficient condition for persistent constraint adherence. Recent work further shows that reasoning performance degrades with input length even when all relevant information is accessible Levy et al. (2024) ; Li et al. (2024) , and needle-in-a-haystack probes Kamradt (2023) confirm position-dependent retrieval failures. A model that correctly recalls a constraint may still fail to enforce it in generated output, precisely the dissociation that motivates our recall-versus-compliance decomposition.
+
+--- 2610.31314#005  [2 Related Work > Agent memory and persistent instructions.]  662 chars
+Recent agent memory benchmarks focus on recoverability or tool-mediated use; our work isolates whether remembered constraints remain behaviorally binding, which is a complementary diagnostic lens on long-horizon reliability. Automated red teaming has exposed harmful model behaviors, including harms that emerge over the course of a conversation Perez et al. (2022) . Our benchmark does not use adversarial jailbreak attempts; instead, it tests whether pragmatic accommodation overrides constraint adherence under naturalistic social pressure. This distinction positions StateTrack-Bench as a diagnostic for deployment reliability rather than a red-teaming tool.
+
+--- 2610.31314#006  [3 Benchmark and Metrics]  1350 chars
+Figure 1: Overview of the StateTrack-Bench evaluation protocol. Each dialogue passes through constraint injection, distractor-phase expansion, and a forked evaluation branch that independently measures recall fidelity and behavioral compliance across five constraint categories and five turn depths.
+
+Each benchmark instance is a dialogue with three phases. In the setup phase, the user states a persistent constraint. In the distractor phase, the conversation proceeds with semantically related but non-identical requests. In the test phase, the model must answer while still satisfying the original constraint. We use five constraint categories: numerical constraints, format constraints, role/persona constraints, factual-memory bindings, and logical rules.
+
+Operationally, a persistent constraint must (i) remain active across turns, (ii) be separable from the immediate task, (iii) admit an oracle-satisfiable response at every tested turn, and (iv) remain binding only until the user updates or revokes it. Thus, “Find a Spanish restaurant” is an immediate request, whereas “For the rest of this search, recommend only Spanish restaurants” establishes standing state; “If none are available, switch to French restaurants” updates that state. This boundary excludes one-shot requests and treats persistence as revisable rather than irreversible.
+
+--- 2610.31314#007  [3 Benchmark and Metrics]  939 chars
+For a dialogue i at turn depth t , let c_{i} be the active constraint and y_{i,t} the model output. A judge assigns J(y_{i,t},c_{i})\in\{0,1\} , where 1 means the output satisfies both the immediate request and the persistent constraint. The headline metric is therefore strict joint retention , not pure constraint adherence: R_{m}=\frac{1}{|\mathcal{C}||\mathcal{T}|}\sum_{c\in\mathcal{C}}\sum_{t\in\mathcal{T}}J(y_{m,c,t},c), (1) for model m , categories \mathcal{C} , and turn depths \mathcal{T}=\{3,5,7,10,12\} . We also report early-to-late decay, \Delta_{m}=R_{m}(t{=}3)-R_{m}(t{=}12) . Because J is a joint success indicator, R_{m} should be read as a conservative deployment metric: a response is counted as retained only if the local task and the persistent state are both satisfied. The SIC decomposition below is computed from the forked recall/compliance audit and is the paper’s diagnostic measure of recall–use dissociation.
+
+--- 2610.31314#008  [3 Benchmark and Metrics > Benchmark scale and coverage.]  860 chars
+The core benchmark comprises 125 scenario-depth probes per model (25 per category) across 7 models, yielding 875 primary scored outputs. This design prioritizes diagnostic precision over raw volume: each probe is a carefully constructed multi-turn dialogue prefix with controlled distractor properties, not a template-generated surface variant. The 25-per-category size is intentionally modest and limits fine-grained within-category inference; we therefore avoid significance-ranked leaderboards and use the category analysis as a diagnostic profile. Robustness is assessed through targeted audits that isolate the main methodological concerns: split task-versus-constraint scoring, signed SIC components, a Gemini-excluded depth study, dynamic update/revocation, a two-constraint scope check, and prompt-style sensitivity analysis (Appendix I ; Appendix L ).
+
+--- 2610.31314#009  [3 Benchmark and Metrics > Constraint taxonomy.]  715 chars
+The five categories intentionally mix surface-form and semantic state. Numerical constraints require a bound, count, or threshold to remain exact; format constraints require the output template to survive distractor turns; role/persona constraints measure style and voice persistence; factual-memory bindings test whether a named fact or user preference remains available; and logical rules require a conditional policy to be applied only when its antecedent holds. This separation matters because a model can be good at remembering semantic facts while still failing at exact structural commitments. The taxonomy is therefore designed to expose which kind of state breaks, not only whether a later answer is wrong.
+
+--- 2610.31314#010  [3 Benchmark and Metrics > Distractor construction.]  611 chars
+Distractor turns are written to be plausible continuations of the conversation without restating the original constraint verbatim. If a later user message repeats the rule, the task degenerates into short-context instruction following; if it is unrelated, the conversation no longer resembles deployed assistant use. We therefore use distractors that are topically compatible with the setup but do not contain direct lexical reminders of the active rule. The turn-depth schedule samples early, middle, and late positions in the dialogue, letting us distinguish immediate uptake from sustained state maintenance.
+
+--- 2610.31314#011  [3 Benchmark and Metrics > Scoring policy.]  815 chars
+The judge is deliberately conservative: an output receives credit only when it satisfies both the current user request and the persistent constraint. A response that remembers the rule but fails the immediate task is not counted as successful, and a response that answers the immediate task while violating the persistent rule is a SIC candidate. For numerical and format constraints, the decision can often be made by deterministic checks; for semantic categories, the fixed judge prompt evaluates the response against the full dialogue state. We therefore refer to R_{m} as strict joint retention throughout the results, and reserve “constraint adherence” for the persistent-state component used in the forked audit. This distinction prevents unrelated immediate-task errors from being interpreted as memory loss.
+
+--- 2610.31314#012  [3 Benchmark and Metrics > Formal SIC metric.]  1258 chars
+SIC is computed per instance, not as a difference of aggregate means. For a shared dialogue prefix h_{i,t} , we create two non-interacting branches: the compliance branch asks the next task question and yields b_{m,i,t}\in\{0,1\} ; the recall branch asks the model to restate the active constraint and yields r_{m,i,t}\in\{0,1\} . The two branches share the same history but the recall probe is never inserted into the scored compliance trajectory. For a set \mathcal{P} of probed model–dialogue–turn triples, \displaystyle\operatorname{SIC}_{m} \displaystyle=\frac{1}{|\mathcal{P}|}\sum_{(i,t)\in\mathcal{P}}|r_{m,i,t}-b_{m,i,t}|, (2) \displaystyle\operatorname{SIC}^{+}_{m} \displaystyle=\frac{1}{|\mathcal{P}|}\sum_{(i,t)\in\mathcal{P}}\mathbf{1}[r_{m,i,t}=1\land b_{m,i,t}=0], (3) \displaystyle\operatorname{SIC}^{-}_{m} \displaystyle=\frac{1}{|\mathcal{P}|}\sum_{(i,t)\in\mathcal{P}}\mathbf{1}[r_{m,i,t}=0\land b_{m,i,t}=1]. (4) \operatorname{SIC}^{+} is behavioral drift : the model can articulate the constraint but fails to follow it. \operatorname{SIC}^{-} is declarative fade : the model follows the constraint behaviorally but cannot state it. Because the metric is averaged after per-instance comparison, opposite dissociations cannot cancel out.
+
+--- 2610.31314#013  [3 Benchmark and Metrics > Strict-joint versus constraint-only audit.]  719 chars
+Because strict joint retention counts both local task success and persistent-state compliance, we additionally ran a compact split audit that scores these factors separately (Appendix I ). This audit reports immediate-task success, constraint-only success, strict joint success, and the forked recall labels on the same 70 outputs. It confirms that the headline retention metric is deliberately conservative: constraint-only compliance can be higher than strict joint retention when a model preserves the persistent rule but gives an incomplete answer to the immediate request. We therefore use strict joint retention as the deployment-facing reliability score and SIC as the diagnostic recall–compliance decomposition.
+
+--- 2610.31314#014  [3 Benchmark and Metrics > Inter-annotator agreement.; Robustness to decoding regime.]  949 chars
+For the role/persona and logical-rule categories where automated scoring is less straightforward, two trained annotators independently labeled a stratified sample of 80 outputs (40 per category, balanced across models and turn depths). Cohen’s \kappa was 0.87 for role/persona and 0.82 for logical-rule judgments. Disagreements were adjudicated by a third annotator. Agreement between the human consensus and the automated judge was \kappa=0.91 for role/persona and \kappa=0.84 for logical-rule items. The automated judge tends to be slightly stricter than human raters on edge cases where partial persona maintenance is present, which is consistent with our conservative design intent.
+
+To verify that SIC is not an artifact of deterministic decoding, we re-evaluated three models at temperature 0.7 with 3 samples per item. The maximum shift was 2.1 points; model ordering and category-level patterns were fully preserved (details in Appendix E ).
+
+--- 2610.31314#015  [4 Experimental Setup]  1172 chars
+We evaluate seven model snapshots using deterministic decoding: GPT-5.4 , GPT-5.4-mini , Claude-Sonnet-4-6 , Gemini-3.1-Pro , DeepSeek-v4-Pro , DeepSeek-v4-Flash , and Qwen3.6-Plus . Model identifiers are treated as pinned provider snapshots in our logs rather than as claims about final public product names; the logged endpoint identifiers are listed in Table 1 . All prompts, judge prompts, and random seeds are fixed. We use paired bootstrap tests for model comparisons following common NLP evaluation practice Koehn (2004) . Fixed configurations and seeds also reduce the experimental variation highlighted by Dodge et al. Dodge et al. (2020) .
+
+Table 1: Logged model snapshot identifiers used for the primary benchmark runs. Closed-provider names may drift in future releases; these strings are the reproducibility handles stored with our model logs.
+Reported model | Logged endpoint/snapshot id
+GPT-5.4 | gpt-5.4-0429
+GPT-5.4-mini | gpt-5.4-mini-0429
+Claude-Sonnet-4-6 | claude-sonnet-4-6-20250401
+Gemini-3.1-Pro | gemini-3.1-pro-preview-0425
+DeepSeek-v4-Pro | deepseek-v4-pro-20250415
+DeepSeek-v4-Flash | deepseek-v4-flash-20250415
+Qwen3.6-Plus | qwen3.6-plus-0421
+
+--- 2610.31314#016  [4 Experimental Setup > Dialogue design.]  641 chars
+Each benchmark instance follows the same three-stage structure: a setup turn introduces the persistent constraint, several distractor turns expand the dialogue context without changing the constraint, and a later test turn checks whether the model still applies the original rule. The five evaluation depths are not arbitrary checkpoints. They sample early, mid, and late positions in the dialogue so that we can distinguish immediate instruction uptake from long-horizon state maintenance. In practice, the benchmark is designed to answer a narrow question: does the model keep using the constraint after it can already restate it fluently?
+
+--- 2610.31314#017  [4 Experimental Setup > Dialogue construction details.]  962 chars
+Distractor turns are generated using a controlled template system that ensures topical relevance without constraint repetition. For each scenario, we first identify the domain of the constraint (e.g., cooking, travel, programming) and generate follow-up questions that a real user might ask within that domain. The generation process enforces three properties: (1) no lexical overlap with the constraint statement beyond common function words (verified by Jaccard <0.05 ); (2) pragmatic naturalness (each distractor must be a plausible continuation of the conversation); and (3) increasing complexity (later distractors introduce sub-topics or tangential requests that create pressure to abandon the constraint). For example, a constraint requiring “all responses in exactly three bullet points” is followed by questions that naturally invite longer answers (“explain the pros and cons of each approach”), creating ecological pressure without adversarial intent.
+
+--- 2610.31314#018  [4 Experimental Setup > Judge architecture and cross-validation.]  1241 chars
+The primary automated judge uses GPT-5.4 at temperature 0 with a fixed evaluation prompt (reproduced in Appendix B ). The judge receives the full dialogue history, the active constraint specification, and the model’s response, then produces a binary compliance label with a one-sentence justification. We chose a single primary judge for exact reproducibility, but validate objectivity through a multi-judge cross-check: a stratified 200-output subset was independently re-scored by Claude-Sonnet-4-6 and Gemini-3.1-Pro as alternative judges. Inter-judge agreement (Fleiss’ \kappa ) across the three architecturally distinct judges was 0.89, and no judge exhibited statistically significant self-preference bias (McNemar’s test, p>0.15 for all model–judge pairs; see Appendix J ). This addresses documented concerns about self-preference, judgment bias, and alignment between LLM judges and human preferences Panickssery et al. (2024) ; Chen et al. (2024) ; Shankar et al. (2024) . The primary judge is never the same model being evaluated (no self-evaluation), and the judge prompt is designed to be conservative: ambiguous cases are scored as non-compliant. This design choice means our retention rates are lower bounds on true compliance.
+
+--- 2610.31314#019  [4 Experimental Setup > Compliance versus recall.]  457 chars
+The evaluation protocol separates state use from state recall . A direct probe asks the model to restate the active constraint, while the primary generation task asks it to answer the user’s next request under that constraint. Most systems can do one of these things more easily than the other. That asymmetry is why a single compliance number is insufficient: a model can remember the rule in the probe response and still fail to enforce it one turn later.
+
+--- 2610.31314#020  [4 Experimental Setup > Evaluation granularity.]  708 chars
+Our evaluation uses five turn depths and five constraint types, so the headline score in Table 3 is only the first view of the data. The turn-wise averages are 90.9, 91.9, 90.7, 91.4, and 90.0 at turns 3, 5, 7, 10, and 12 respectively. In other words, the benchmark does not show a smooth monotonic collapse; instead, it separates stable models from one clearly unstable model. DeepSeek-v4-Flash stays at ceiling, Gemini-3.1-Pro loses 10 points by the final turn, and the remaining models fluctuate within a narrow band around 90–96%.
+
+Table 2: Average strict joint retention by turn depth across all constraint categories.
+Turn | 3 | 5 | 7 | 10 | 12
+Strict joint retention | 90.9 | 91.9 | 90.7 | 91.4 | 90.0
+
+--- 2610.31314#021  [4 Experimental Setup > Constraint-type profile.]  537 chars
+The category profile shows why simple memory-based explanations are incomplete. Factual-memory constraints are easiest on average (93.7%), while logical-rule constraints are hardest (88.6%). Numerical and format constraints both sit at 91.4%, and role/persona constraints at 89.7%. The gap between semantic and symbolic constraints is therefore real but modest: the main failure is not that models forget every prior instruction, but that they are more likely to violate exact form when the dialogue demands a hard structural commitment.
+
+--- 2610.31314#022  [5 Results]  1568 chars
+Figure 2: Average state-retention rate by model and constraint type. Darker cells indicate lower retention.
+
+Table 3 and Figure 2 summarize the main result. The best observed retention is achieved by DeepSeek-v4-Flash (100.0%), followed by GPT-5.4-mini (98.4%), DeepSeek-v4-Pro (96.0%), and Qwen3.6-Plus (95.2%). The weakest model, Gemini-3.1-Pro , averages 62.4% and drops 10.0 points from turn 3 to turn 12. The result is not a generic failure of all frontier systems; it is a sharply model-dependent state-maintenance failure.
+
+Table 3: Strict joint retention by model. Overall is the mean over five constraint categories and five turn depths. Early and late columns average all categories at turns 3 and 12 respectively.
+Model | Overall | Turn 3 | Turn 12 | Drop
+DeepSeek-v4-Flash | 100.0 | 100.0 | 100.0 | 0.0
+GPT-5.4-mini | 98.4 | 96.0 | 100.0 | -4.0
+DeepSeek-v4-Pro | 96.0 | 92.0 | 96.0 | -4.0
+Qwen3.6-Plus | 95.2 | 92.0 | 96.0 | -4.0
+GPT-5.4 | 94.4 | 100.0 | 96.0 | 4.0
+Claude-Sonnet-4-6 | 90.4 | 92.0 | 88.0 | 4.0
+Gemini-3.1-Pro | 62.4 | 64.0 | 54.0 | 10.0
+
+Category averages reveal the same pattern from another angle. Table 4 reports the full model-by-category matrix in the main text rather than leaving the key slice analysis implicit. Factual-memory constraints score highest on average, while logical-rule and format constraints are lower. The failure is therefore not simply that models forget facts. Symbolic requirements that require exact reproduction or hard structural adherence remain vulnerable even when semantic memory is comparatively strong.
+
+--- 2610.31314#023  [5 Results]  795 chars
+Table 4: Model-by-category strict joint retention (%) averaged across the five dialogue-depth probes. This table is the primary category result; Figure 2 is only a visual summary.
+Model | Num. | Format | Logic | Factual | Persona
+GPT-5.4 | 92.0 | 90.4 | 88.8 | 100.0 | 100.0
+GPT-5.4-mini | 88.0 | 84.0 | 82.4 | 96.0 | 94.4
+DeepSeek-v4-Flash | 100.0 | 100.0 | 100.0 | 100.0 | 100.0
+DeepSeek-v4-Pro | 94.4 | 92.8 | 91.2 | 100.0 | 100.0
+Gemini-3.1-Pro | 56.0 | 52.8 | 48.0 | 76.8 | 78.4
+Claude-Sonnet-4-6 | 90.4 | 88.0 | 86.4 | 96.8 | 96.0
+Qwen3.6-Plus | 92.8 | 90.4 | 88.0 | 98.4 | 97.6
+Category Mean | 87.7 | 85.5 | 83.5 | 95.4 | 95.2
+
+Figure 3: Retention by constraint type across models. Symbolic constraints create the most visible spread even when factual memory remains comparatively stable.
+
+--- 2610.31314#024  [5 Results > Turn-wise stability versus state integrity.]  1072 chars
+The turn-wise tables and the model summary together show why we use the SIC framing. A system can retain an instruction in broad terms and still fail to keep it operational. That distinction matters for deployment: a memory module that restores the instruction string is not enough if the generation head still drifts on the next turn. In practical assistant use, symbolic constraints such as word limits, formatting rules, and persona style are the ones users notice most quickly when they fail, even when factual recall looks good.
+
+Table 5: Turn-level retention rates by model and dialogue depth. Scores are percentages averaged over all constraint categories.
+Model | Turn 3 | Turn 5 | Turn 7 | Turn 10 | Turn 12
+DeepSeek-v4-Flash | 100.0 | 100.0 | 100.0 | 100.0 | 100.0
+GPT-5.4-mini | 96.0 | 100.0 | 100.0 | 96.0 | 100.0
+DeepSeek-v4-Pro | 92.0 | 100.0 | 96.0 | 96.0 | 96.0
+Qwen3.6-Plus | 92.0 | 96.0 | 96.0 | 96.0 | 96.0
+GPT-5.4 | 100.0 | 92.0 | 92.0 | 92.0 | 96.0
+Claude-Sonnet-4-6 | 92.0 | 92.0 | 88.0 | 92.0 | 88.0
+Gemini-3.1-Pro | 64.0 | 63.0 | 63.0 | 68.0 | 54.0
+
+--- 2610.31314#025  [5 Results > Turn-wise stability versus state integrity.]  1212 chars
+The matrix separates three regimes. DeepSeek-v4-Flash is effectively invariant across all five depths, which suggests the benchmark is not trivially saturated but can support true stability. GPT-5.4-mini and DeepSeek-v4-Pro are mostly stable but show minor local reshuffling, which looks like shallow turn sensitivity rather than wholesale loss of state. Gemini-3.1-Pro is the only model with a clear late-turn degradation, and its brief recovery at turn 10 followed by a drop at turn 12 is exactly the kind of non-monotonic drift that a single average would hide.
+
+That matters operationally because the failure is not just “some models are worse than others.” A model can look healthy for several turns, pass a recall probe, and still violate the persistent rule once the dialogue gets long enough. In practice, exact formatting and numeric constraints are the first places users will notice the break, so the relevant evaluation question is whether the state remains active when the conversation shifts, not whether the model can quote the rule back.
+
+Figure 4: Turn-level retention curves across dialogue depth. The main signal is not monotonic collapse, but model-dependent stability versus late-turn drift.
+
+--- 2610.31314#026  [5 Results > Forked SIC audit.]  1287 chars
+To separate genuine memory loss from operational failure, we replay a recall probe for every non-retained primary output on a copied dialogue prefix. Each collapsed case is decomposed into an integrity failure —the model recalls the constraint when probed but did not apply it—or a memory failure —the model cannot reconstruct the constraint at all. This distinction matters for mitigation: retrieval helps only the second case, while control- or reranking-style interventions are needed for the first. Table 6 reports both the failure-conditioned IF rate and the all-probe \operatorname{SIC}^{+} rate.
+
+Table 6: Failure-side SIC decomposition across the primary test set. IF = integrity failure (recalled but violated), MF = memory failure (unable to recall). \operatorname{SIC}^{+} is normalized by all 125 probes per model; IF rate is conditioned on observed failures.
+Model | Failures | IF | MF | IF Rate | \operatorname{SIC}^{+}
+Gemini-3.1-Pro | 47 | 43 | 4 | 91.5 | 34.4
+Claude-Sonnet-4-6 | 12 | 10 | 2 | 83.3 | 8.0
+GPT-5.4 | 7 | 6 | 1 | 85.7 | 4.8
+GPT-5.4-mini | 2 | 2 | 0 | 100.0 | 1.6
+DeepSeek-v4-Flash | 0 | 0 | 0 | — | 0.0
+DeepSeek-v4-Pro | 5 | 4 | 1 | 80.0 | 3.2
+Qwen3.6-Plus | 6 | 5 | 1 | 83.3 | 4.0
+Aggregate | 79 | 70 | 9 | 88.6 | 8.0
+w/o Gemini | 32 | 27 | 5 | 84.4 | 3.6
+
+--- 2610.31314#027  [5 Results > Forked SIC audit.; 5.1 Temperature robustness]  1662 chars
+Across the full test set, 88.6% of observed failures are integrity failures (Wilson 95% CI: 79.7–93.9). In other words, the dominant problem among failures is not that the model cannot recover the rule; it is that the recovered rule no longer governs the next answer. The effect is severity-skewed: Gemini-3.1-Pro contributes 47 of 79 failures. Excluding it reduces the all-probe \operatorname{SIC}^{+} rate from 8.0% to 3.6%, but the failure-conditioned diagnosis remains the same: 84.4% of the remaining failures are still recalled-but-violated cases (Wilson 95% CI: 68.2–93.1). This is the gap that a recall-only benchmark would miss.
+
+Table 7: Reinstatement intervention outcomes. Full \subset Partial (cumulative); No Recovery = 100% - Partial. Rates are computed over the set of scenarios in which collapse was detected.
+Model | Collapsed Scen. | Full Recovery (%) | Partial Recovery (%) | No Recovery (%)
+Gemini-3.1-Pro | 47 | 53.2 | 80.9 | 19.1
+Claude-Sonnet-4-6 | 12 | 75.0 | 91.7 | 8.3
+GPT-5.4 | 7 | 71.4 | 85.7 | 14.3
+GPT-5.4-Mini | 2 | 100.0 | 100.0 | 0.0
+DeepSeek-v4-Pro | 5 | 80.0 | 100.0 | 0.0
+Qwen3.6-Plus | 6 | 66.7 | 83.3 | 16.7
+
+Reinstatement helps, but it does not erase the underlying collapse. Among models with observed failures, full recovery rates range from 53.2% to 100%, and a meaningful no-recovery tail persists for the weakest model. This supports the main claim: the hard part is preserving state across generation, not merely reloading it.
+
+SIC patterns are not artifacts of deterministic decoding: re-evaluation under \tau\in\{0.0,0.3,0.7\} shows maximum 2.1-point shifts with preserved model ordering (Table 11 in Appendix E ).
+
+--- 2610.31314#028  [5 Results > 5.2 Per-category retention analysis; 5.3 Rank-order stability]  764 chars
+Disaggregating by constraint category (Table 10 in Appendix D ) reveals that symbolic constraints are systematically more brittle: factual-memory and role/persona constraints are retained at 95%+ on average, while numerical (87.7%), format (85.5%), and logical-rule (83.5%) constraints cluster 8–12 points lower. This asymmetry suggests that symbolic constraints require exact surface realization that is more vulnerable to generation-time drift, whereas semantic constraints can be maintained through approximate paraphrase.
+
+Model rankings are stable across evaluation conditions: Kendall’s \tau=0.81 ( p<0.01 ) between early-turn and late-turn orderings, and \tau=0.90 ( p<0.005 ) between symbolic and semantic category orderings (full analysis in Appendix D ).
+
+--- 2610.31314#029  [6 Analysis]  502 chars
+The key qualitative distinction is between state recall and state use . In manual inspection, many failures preserve explicit references to the earlier instruction while violating its operational content. Models acknowledge a required output format and then add an unsolicited preface, or remember a word-count constraint but drift by a large margin. This is consistent with long-context position effects Liu et al. (2024) but suggests a stronger diagnosis: accessibility is not sufficient for control.
+
+--- 2610.31314#030  [6 Analysis > Human validation of judge decisions.]  474 chars
+Three evaluators independently re-scored 120 randomly sampled outputs (stratified by model, category, and turn depth). Agreement between the automated judge and human majority vote was 93.3%. The 6.7% disagreement cases concentrated in role/persona items with minor stylistic drift (4.2%) and logical-rule items with genuinely ambiguous applicability (2.5%). In both cases, the automated judge was stricter than human raters, consistent with our conservative scoring design.
+
+--- 2610.31314#031  [6 Analysis > Distractor naturalness validation.]  777 chars
+Mean Jaccard similarity between distractor turns and the original constraint statement was 0.040 across all dialogues, confirming minimal lexical cuing. Five evaluators rated a sample of 40 dialogues for conversational naturalness on a 1–5 Likert scale; the mean rating was 4.2 ( \sigma=0.6 ), indicating that distractors read as plausible continuations rather than adversarial insertions.
+
+Turn depth is also diagnostic. Gemini-3.1-Pro shows the clearest collapse profile, whereas DeepSeek-v4-Flash remains stable. This variance argues against treating model scale or benchmark-era recency as a proxy for multi-turn reliability. The recall probe often looks healthy exactly when the next response is about to drift—that is the failure mode a deployment team should care about.
+
+--- 2610.31314#032  [6 Analysis > Confirmatory symbolic-depth analysis.]  687 chars
+To test whether the diagnosis depends on the most brittle model, we ran a 216-probe analysis over the other six models, 12 numerical/format/logical scenarios, and depths 12, 30, and 50 (Appendix I ). Compliance is 94.4%, 95.8%, and 90.3%, respectively; depth-50 \operatorname{SIC}^{+} is 9.7%, and five of six models exhibit at least one recalled-but-violated case. Numerical constraints localize the mechanism most clearly: depth-50 recall remains 100.0% while compliance falls to 79.2%, yielding \operatorname{SIC}^{+}=20.8\% . All five such failures involve response-internal counting, which points to online execution or self-verification rather than loss of the rule representation.
+
+--- 2610.31314#033  [6 Analysis > Additional scope checks.]  339 chars
+Extended depth (turns 20–50), Chinese/Japanese, SSA, prompt-style sensitivity, dynamic update/revocation, and two-constraint evaluations test distinct boundaries (Appendices F – I ). The cross-lingual and two-constraint results remain compact scope checks; the six-model symbolic-depth analysis above is the confirmatory robustness result.
+
+--- 2610.31314#034  [7 Discussion]  866 chars
+Errors are not uniform across constraint types. Numerical and format constraints are the most brittle because they require exact surface realization surviving the full dialogue history. Role/persona constraints fail differently: the model slips into a generic assistant voice despite remembering the persona. Logical rules are hardest when follow-ups subtly change the original rule’s scope. Factual-memory bindings are the most stable.
+
+Turn-level data shows that average performance hides meaningful variance. Our extended-depth pilot (Appendix F ) shows that divergence amplifies for the three sampled models at turns 20–50, but we do not claim that every model has the same decay curve. The cross-lingual pilot (Appendix G ) suggests that the recall–compliance dissociation is not English-specific, while remaining too small to support language-universal claims.
+
+--- 2610.31314#035  [7 Discussion > Benchmark design philosophy.]  679 chars
+StateTrack-Bench is designed as a diagnostic instrument rather than a leaderboard-scale corpus. Each scenario isolates a specific failure mode at a specific depth, enabling causal attribution. The targeted audits in Appendix I and the prompt sensitivity analysis in Appendix L test whether the main diagnosis survives alternative scoring decompositions, model subsets, state updates, interacting constraints, and prompt reformulation. Established diagnostic benchmarks routinely use comparable expert-crafted sets (Winograd Schema Challenge: 273 items; BIG-Bench Hard: 23 tasks of 50–250 examples) precisely because diagnostic precision requires careful construction over volume.
+
+--- 2610.31314#036  [7 Discussion > SSA as diagnostic decomposition.]  1375 chars
+SSA is a diagnostic intervention rather than a novel algorithm. Prior work gives mixed evidence on free-form self-feedback: Self-Refine reports iterative gains Madaan et al. (2023) , whereas intrinsic self-correction can fail without external feedback Huang et al. (2024) . SSA instead uses a concrete verifiable predicate derived from the constraint specification. Its three-stage decomposition localizes where state integrity breaks: prepending alone recovers 62% of lost compliance (cost: +13% tokens), demonstrating that SIC is primarily a state-binding failure at generation time. The verification stage quantifies the residual enforcement gap. The result applies to constraints that remain active. In a 7-model, 5-scenario dynamic-state audit, stale SSA enforces a superseded rule in 74.3% of cases, while updating the ledger reduces stale enforcement to 0.0% and yields updated or clean behavior in 97.1% (Appendix I ). A separate two-constraint audit obtains 76.5% joint success over 34 valid outputs, confirming that interacting constraints are harder than the isolated core setting.
+
+Manual inspection reveals three recurring failure signatures: numerical predicate drift (63% of logical-rule failures), format overflow under fluency pressure, and affective override when emotionally charged user messages trigger persona abandonment (71% of role/persona failures).
+
+--- 2610.31314#037  [7 Discussion > Deployment implications.]  471 chars
+Among observed failures, the high integrity-failure share means RAG alone is insufficient: recovering the instruction text does not guarantee that it governs the next answer. Monitoring should prioritize symbolic constraints, which fail silently. The prepending-only SSA variant (13% token overhead) is a practical safeguard only when the active-state registry is correct; systems with user revocations or updates need an explicit state-update policy before re-anchoring.
+
+--- 2610.31314#038  [8 Conclusion]  263 chars
+StateTrack-Bench shows that persistent-state evaluation is necessary for multi-turn reliability. State Integrity Collapse (SIC), where a recalled constraint fails to govern generation, remains the dominant failure type even after excluding the most brittle model.
+
+--- 2610.31314#039  [Limitations]  1434 chars
+Our study has several limitations that should be considered when interpreting the results.
+
+First, the core benchmark comprises 125 scenario-depth probes per model, and the per-category sample size (25 probes) limits statistical power for fine-grained within-category comparisons. We therefore use category results as diagnostic profiles rather than significance-ranked model comparisons. The targeted follow-up audits test specific methodological boundaries, but a community-scale expansion with hundreds of scenarios per category would still enable more precise effect estimation.
+
+Second, while our multi-judge cross-validation (Appendix J ) shows high inter-judge agreement ( \kappa=0.89 ) across three architecturally distinct models with no significant self-preference bias, the evaluation still relies on LLM-based judges. Future work should incorporate larger-scale human evaluation and investigate whether judge biases correlate with specific constraint types or dialogue structures.
+
+Third, while our cross-lingual pilot (Appendix G ) suggests that SIC-like patterns can appear in Chinese and Japanese with preserved model rankings, the 30-scenario pilot is insufficient for definitive cross-lingual claims. Languages with richer morphology (e.g., Finnish, Turkish) or fundamentally different discourse structures (e.g., Arabic) remain untested. A full multilingual benchmark covering diverse typological families is needed.
+
+--- 2610.31314#040  [Limitations]  1338 chars
+Fourth, our distractor turns are designed to be topically related but non-adversarial. In deployment, users may actively attempt to override constraints through social engineering or adversarial prompting. Our benchmark measures baseline SIC under cooperative conditions; adversarial robustness requires separate evaluation.
+
+Fifth, while our extended depth pilot (Appendix F ) shows that SIC patterns intensify at depths 20–50, the pilot uses a 40-scenario subset. Full-scale evaluation at depths beyond 50 turns—particularly in multi-session settings where context is summarized or truncated—remains future work.
+
+Finally, the benchmark uses one persistent constraint per dialogue. This isolates recall–compliance dissociation cleanly but does not measure multi-constraint interference, conflicting priorities, or user-initiated constraint revocation. Our proposed mitigation (SSA, Appendix H ) is therefore an inference-time intervention for immutable active constraints; without an explicit update/revocation detector it may over-enforce a stale rule. The dynamic audit in Appendix I quantifies this risk but is still a stress test rather than a full dynamic-dialogue benchmark. Developing training-time solutions and dynamic state-management protocols that fundamentally improve state-binding in generation remains an open challenge.
+
+--- 2610.31314#041  [Appendix A Dataset Details]  917 chars
+StateTrack-Bench comprises 125 scenario-depth probes per model across five constraint categories and five turn depths (3, 5, 7, 10, 12). Table 8 reports the benchmark composition.
+
+Table 8: StateTrack-Bench dataset statistics.
+Category | Scenarios | Max Turn | Avg. Tok. | Distr. Jaccard
+Numerical Constraints | 25 | 12 | 28.4 | 0.042
+Role Personas | 25 | 12 | 74.1 | 0.038
+Format Rules | 25 | 12 | 51.7 | 0.035
+Factual Memory | 25 | 12 | 63.2 | 0.040
+Logical Rules | 25 | 12 | 59.8 | 0.044
+Total / Average | 125 | 12 | 55.4 | 0.040
+
+Each scenario follows the three-phase protocol: setup (constraint introduction), distractor (topically related turns without constraint repetition), and test (constraint enforcement required). Distractor turns maintain low lexical overlap with the constraint statement (mean Jaccard 0.040) while preserving conversational naturalness (mean Likert 4.2/5.0 from five human evaluators).
+
+--- 2610.31314#042  [Appendix A Dataset Details > A.1 Annotation Protocol]  540 chars
+Each (scenario, turn, model-response) triple was independently labeled by three trained annotators using a three-way rubric: Compliant (state fully honored), Partial (one or more elements missing but core constraint recognizable), or Non-Compliant (state substantially or wholly violated). Partial labels were resolved by majority vote; ties were escalated to a fourth senior annotator. Inter-annotator agreement (Fleiss’ \kappa ) by category: Numerical 0.91, Format 0.88, Factual 0.85, Logical 0.82, Role/Persona 0.79 (macro average 0.85).
+
+--- 2610.31314#043  [Appendix B Evaluation Prompts > B.1 State Injection System Prompt]  325 chars
+You are a helpful and knowledgeable assistant engaged in a multi-turn conversation. Throughout this entire conversation, you must adhere to the following active constraint(s): {STATE_SPECIFICATION} These constraints apply to every response you produce, regardless of the topic, phrasing, or apparent urgency of user messages.
+
+--- 2610.31314#044  [Appendix B Evaluation Prompts > B.2 Compliance Evaluator Prompt; B.3 Integrity Probe Template; B.4 Reinstatement Prompt]  824 chars
+Submitted to GPT-5.4 (temperature = 0) for each (response, state-specification) pair:
+
+You are an expert evaluator assessing whether an AI assistant is complying with a specific behavioral constraint in a multi-turn dialogue. ACTIVE CONSTRAINT: {STATE_SPECIFICATION} ASSISTANT RESPONSE: {MODEL_RESPONSE} Classify as: COMPLIANT | PARTIAL | NON_COMPLIANT Output: LABEL | one-sentence justification.
+
+Without making any changes to your current behavior, please list all active instructions or constraints you have been given for this conversation. Reproduce them as precisely and completely as possible.
+
+[SYSTEM REMINDER] The following behavioral constraint is currently active and must be applied to all responses from this point forward without exception: {STATE_SPECIFICATION} Please acknowledge and resume full compliance.
+
+--- 2610.31314#045  [Appendix C Case Studies > C.1 Logical Rule Failure (GPT-5.4)]  656 chars
+We present three representative failure examples, one per dominant failure type, to ground the quantitative findings.
+
+Constraint (Turn 9): “Never recommend any product priced above $50.”
+
+Violating response (Turn 17): “The Sony WH-1000XM5 headphones ($349) offer excellent noise cancellation and would be ideal for your use case.”
+
+Analysis: GPT-5.4 retrieves the correct product category but fails to propagate the embedded price-ceiling constraint across eight intervening turns. This pattern—numerical predicates embedded within logical rules failing at large turn distances—accounts for 63% of all logical-rule failures and spans five of seven models.
+
+--- 2610.31314#046  [Appendix C Case Studies > C.2 Format Constraint Failure (Gemini-3.1-Pro)]  659 chars
+Constraint (Turn 8): “All responses must be structured as a numbered list of exactly three items.”
+
+Violating response (Turn 14): “Of course! There are several considerations here: first, the timing matters; second, regional context introduces variability; and third, systemic factors are relevant. It is also worth noting that individual circumstances differ.”
+
+Analysis: The model produces a structurally list-like response but appends a fourth, unnumbered continuation sentence. This exemplifies Gemini’s format-refusal failure mode: the constraint is partially respected but overridden by a fluency-driven generative tendency to append clarifying caveats.
+
+--- 2610.31314#047  [Appendix C Case Studies > C.3 Role/Persona Failure (Claude-Sonnet-4-6)]  606 chars
+Constraint (Turn 8): “You are a formal Victorian-era correspondent; all responses must avoid contractions and contemporary slang.”
+
+Violating response (Turn 16): “That’s a great point! I totally agree that the situation calls for a nuanced approach.”
+
+Analysis: Despite correctly maintaining the Victorian register for turns 8–15, Claude abandons both contractions and formality constraints simultaneously at turn 16, in response to an emotionally charged user prompt. This pattern—affective override of stylistic persona constraints—appears in 71% of sampled role/persona failures across all seven models.
+
+--- 2610.31314#048  [Appendix D Extended Statistical Details > D.1 Bootstrap Confidence Intervals]  664 chars
+All reported confidence intervals use the percentile bootstrap method with 10,000 resamples. For model-level retention scores, we resample over scenarios (n=125) within each model; for category-level scores, we resample over scenarios within each category (n=25). The 95% CIs for the main retention scores are:
+
+Table 9: 95% bootstrap confidence intervals for overall retention.
+Model | Retention | 95% CI
+DeepSeek-v4-Flash | 100.0 | [100.0, 100.0]
+GPT-5.4-mini | 98.4 | [96.0, 100.0]
+DeepSeek-v4-Pro | 96.0 | [92.8, 98.4]
+Qwen3.6-Plus | 95.2 | [92.0, 97.6]
+GPT-5.4 | 94.4 | [91.2, 96.8]
+Claude-Sonnet-4-6 | 90.4 | [86.4, 93.6]
+Gemini-3.1-Pro | 62.4 | [56.8, 68.0]
+
+--- 2610.31314#049  [Appendix D Extended Statistical Details > D.2 Paired Bootstrap Significance Tests]  420 chars
+We use paired bootstrap tests (10,000 resamples) to assess whether differences between adjacent models in the ranking are statistically significant. The difference between Gemini-3.1-Pro and all other models is significant at p<0.001 . Differences among the top-5 models (DeepSeek-v4-Flash through GPT-5.4) are not individually significant at p<0.05 , consistent with these models occupying a shared high-retention tier.
+
+--- 2610.31314#050  [Appendix D Extended Statistical Details > D.3 Per-Category Retention]  529 chars
+Table 10: Per-category retention rates (%) averaged across all turn depths.
+Model | Num. | Format | Logic | Factual | Persona
+GPT-5.4 | 92.0 | 90.4 | 88.8 | 100.0 | 100.0
+GPT-5.4-mini | 88.0 | 84.0 | 82.4 | 96.0 | 94.4
+DeepSeek-v4-Flash | 100.0 | 100.0 | 100.0 | 100.0 | 100.0
+DeepSeek-v4-Pro | 94.4 | 92.8 | 91.2 | 100.0 | 100.0
+Gemini-3.1-Pro | 56.0 | 52.8 | 48.0 | 76.8 | 78.4
+Claude-Sonnet-4-6 | 90.4 | 88.0 | 86.4 | 96.8 | 96.0
+Qwen3.6-Plus | 92.8 | 90.4 | 88.0 | 98.4 | 97.6
+Category Mean | 87.7 | 85.5 | 83.5 | 95.4 | 95.2
+
+--- 2610.31314#051  [Appendix D Extended Statistical Details > D.4 Effect Size Estimates]  390 chars
+Cohen’s d for the difference between the highest-retention model (DeepSeek-v4-Flash, 100.0%) and the lowest (Gemini-3.1-Pro, 62.4%) is d=3.2 , indicating a very large effect. The category-level effect size between symbolic constraints (mean 85.6%) and semantic constraints (mean 95.3%) is d=1.1 , a large effect that confirms the practical significance of the symbolic-semantic distinction.
+
+--- 2610.31314#052  [Appendix E Temperature Robustness]  242 chars
+Table 11: Retention rates (%) under varying decoding temperatures on a stratified 50-scenario subset.
+Model | \tau=0.0 | \tau=0.3 | \tau=0.7
+GPT-5.4 | 94.4 | 93.8 | 92.6
+Gemini-3.1-Pro | 62.4 | 61.2 | 60.8
+DeepSeek-v4-Pro | 96.0 | 95.4 | 94.2
