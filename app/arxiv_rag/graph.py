@@ -1,8 +1,11 @@
 """
 The RAG pipeline as a LangGraph graph.
 
-    START -> retrieve --(enough evidence?)--> generate -> check_citations -> END
+    START -> retrieve --(enough evidence?)--> evidence -> generate -> check_citations -> END
                      \\--(no)--> no_evidence -> END
+
+Step 4c: "evidence" searches the full-text chunks of the papers retrieve picked, and
+hands the best passages to generate alongside each abstract (two-level retrieval).
 
 Phase 2: retrieve is now multi-stage.
     Step 3: hybrid search casts the net. Vector top 50 + BM25 top 50, fused with RRF.
@@ -17,7 +20,8 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from .config import (CANDIDATES_K, LLM_MODEL_ID, MAX_SOURCES, MIN_RELEVANCE, MIN_SIMILARITY,
-                     RERANK_CANDIDATES, USE_HYBRID, USE_RERANK, log)
+                     RERANK_CANDIDATES, USE_FULLTEXT, USE_HYBRID, USE_RERANK, log)
+from .evidence import gather_evidence
 from .llm import generate_answer
 from .rerank import rerank
 from .retrieval import hybrid_search, search
@@ -37,6 +41,8 @@ class RAGState(TypedDict, total=False):
     usage: dict
     timings_ms: dict
     reranked: bool
+    # {arxiv_id: [{chunk, section, text, score}]} from the full text
+    passages: dict
 
 
 def _similarity(hit: dict) -> float | None:
@@ -80,12 +86,25 @@ def retrieve(state: RAGState) -> RAGState:
 
 
 def route_after_retrieve(state: RAGState) -> str:
-    return "generate" if state["sources"] else "no_evidence"
+    return "evidence" if state["sources"] else "no_evidence"
+
+
+def evidence(state: RAGState) -> RAGState:
+    """Level 2: best full-text passages from the chosen papers. Never fatal: abstracts still work."""
+    if not USE_FULLTEXT:
+        return {"passages": {}}
+    try:
+        ev = gather_evidence(state["question"], state["sources"])
+    except Exception as e:
+        log("evidence_failed", error=repr(e))
+        return {"passages": {}}
+    return {"passages": ev["passages"], "timings_ms": {**state["timings_ms"], **ev["timings_ms"]}}
 
 
 def generate(state: RAGState) -> RAGState:
     t0 = time.perf_counter()
-    result = generate_answer(state["question"], state["sources"])
+    result = generate_answer(
+        state["question"], state["sources"], state.get("passages") or {})
     return {
         "answer": result["text"],
         "usage": {k: result[k] for k in ("input_tokens", "output_tokens", "stop_reason")},
@@ -110,12 +129,14 @@ def no_evidence(state: RAGState) -> RAGState:
 def build_graph():
     g = StateGraph(RAGState)
     g.add_node("retrieve", retrieve)
+    g.add_node("evidence", evidence)
     g.add_node("generate", generate)
     g.add_node("check_citations", check_citations)
     g.add_node("no_evidence", no_evidence)
     g.add_edge(START, "retrieve")
     g.add_conditional_edges("retrieve", route_after_retrieve, [
-                            "generate", "no_evidence"])
+                            "evidence", "no_evidence"])
+    g.add_edge("evidence", "generate")
     g.add_edge("generate", "check_citations")
     g.add_edge("check_citations", END)
     g.add_edge("no_evidence", END)
@@ -134,6 +155,7 @@ def run_query(question: str, category: str | None = None, since: int | None = No
     state = _app.invoke(
         {"question": question, "category": category, "since": since})
     cited = set(state.get("cited_ids", []))
+    passages = state.get("passages") or {}
 
     def summarize(hit):
         m = hit["metadata"]
@@ -143,6 +165,9 @@ def run_query(question: str, category: str | None = None, since: int | None = No
                 "found_by": [name for name, key in (("vector", "vector_rank"), ("bm25", "bm25_rank"))
                              if hit.get(key)] or None,
                 "relevance": round(hit["rerank_score"], 3) if "rerank_score" in hit else None,
+                # Which parts of the full text backed the answer (short snippets, not the paper).
+                "passages": [{"section": p["section"], "score": p["score"], "snippet": p["text"][:240]}
+                             for p in passages.get(hit["key"], [])],
                 "cited": hit["key"] in cited}
 
     return {
@@ -156,6 +181,7 @@ def run_query(question: str, category: str | None = None, since: int | None = No
         "timings_ms": {**state.get("timings_ms", {}), "total": round((time.perf_counter() - t0) * 1000)},
         "model": LLM_MODEL_ID,
         "reranked": state.get("reranked", False),
+        "fulltext_papers": sum(1 for s in state.get("sources", []) if passages.get(s["key"])),
         "min_similarity": MIN_SIMILARITY,
         "min_relevance": MIN_RELEVANCE,
     }

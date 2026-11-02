@@ -1,7 +1,7 @@
 from .bm25 import get_index
 from .config import (BM25_KEY, BM25_LOCAL_PATH, HYBRID_EACH, INDEX_NAME, RAW_BUCKET, RRF_K,
                      VECTOR_BUCKET, log, s3vectors)
-from .embeddings import embed
+from .embeddings import embed_query
 
 
 def build_filter(category: str | None, since: int | None) -> dict | None:
@@ -16,7 +16,7 @@ def build_filter(category: str | None, since: int | None) -> dict | None:
 
 
 def search(query: str, k: int = 5, category: str | None = None, since: int | None = None) -> list[dict]:
-    query_vector, _ = embed(query)
+    query_vector = list(embed_query(query))
     params = {
         "vectorBucketName": VECTOR_BUCKET,
         "indexName": INDEX_NAME,

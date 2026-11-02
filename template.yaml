@@ -162,6 +162,7 @@ Resources:
           # Off after Step 3's eval: hybrid tied rerank-only (1 question of 40 improved, +300 ms).
           # The BM25 index still rebuilds nightly, so flipping this to "true" is all it takes.
           USE_HYBRID: "false"
+          USE_FULLTEXT: "true"   # Step 4c: add full-text passages from the top papers ("false" = abstracts only)
           MIN_RELEVANCE: !Ref MinRelevance
       Events:
         Ask:
@@ -187,6 +188,10 @@ Resources:
             - Effect: Allow
               Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
+            - Effect: Allow
+              # Step 4c: search full-text chunks inside the papers retrieve picked.
+              Action: s3vectors:QueryVectors
+              Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${ChunkIndexName}"
             - Effect: Allow
               # Read the BM25 index (GetObject also covers the HeadObject freshness check).
               Action: s3:GetObject

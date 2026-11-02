@@ -23,13 +23,18 @@ def show(r: dict):
             via = "+".join(s.get("found_by") or []) or "-"
             print(
                 f"  [{s['id']}] {s[key]:.3f}  {s['title'][:62]}  ({'cited' if s['cited'] else 'not cited'}, via {via})")
+            for p in s.get("passages") or []:
+                print(f"      {p['score']:.2f}  {p['section'][:80]}")
     else:
         print("\nClosest papers (all below threshold):")
         for s in r["closest_below_threshold"]:
             print(f"  [{s['id']}] {s[key]:.3f}  {s['title'][:70]}")
     t, u = r["timings_ms"], r["usage"]
     line = (f"\nsearch {t.get('search', '-')} ms | rerank {t.get('rerank', '-')} ms | "
+            f"chunks {t.get('chunks', '-')} ms | passage rerank {t.get('chunk_rerank', '-')} ms | "
             f"generate {t.get('generate', '-')} ms | total {t['total']} ms")
+    if r.get("sources"):
+        line += f"\nfull text used for {r.get('fulltext_papers', 0)} of {len(r['sources'])} papers"
     if u:
         line += f" | tokens in {u['input_tokens']:,} / out {u['output_tokens']:,}"
     print(line)

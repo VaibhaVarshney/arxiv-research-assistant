@@ -26,14 +26,18 @@ def doc_text(hit: dict) -> str:
     return f"{m['title']}\n\n{m['abstract']}"
 
 
-def rerank(query: str, hits: list[dict], top_n: int) -> list[dict]:
-    """Return hits re-ordered by relevance, each with a 'rerank_score' between 0 and 1."""
+def rerank(query: str, hits: list[dict], top_n: int, text_fn=doc_text) -> list[dict]:
+    """Return hits re-ordered by relevance, each with a 'rerank_score' between 0 and 1.
+
+    text_fn decides what the reranker reads: title+abstract for papers (default),
+    section+passage for full-text chunks (Step 4c).
+    """
     if not hits:
         return []
     resp = bedrock_agent.rerank(
         queries=[{"type": "TEXT", "textQuery": {"text": query}}],
         sources=[{"type": "INLINE",
-                  "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": doc_text(h)}}}
+                  "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": text_fn(h)}}}
                  for h in hits],
         rerankingConfiguration={
             "type": "BEDROCK_RERANKING_MODEL",

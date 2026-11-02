@@ -279,6 +279,16 @@
       .meta .id {
         font-family: var(--mono);
       }
+      .ev {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .ev b {
+        font-weight: 600;
+        color: var(--ink);
+      }
       .badge {
         font-size: 11px;
         font-weight: 600;
@@ -547,7 +557,7 @@
               s.cited ? "cited" : "not cited",
             ),
           );
-        return el(
+        const card = el(
           "div",
           { class: "src", id: `src-${s.id}` },
           el(
@@ -557,6 +567,22 @@
           ),
           meta,
         );
+        // Phase 2 Step 4c: which sections of the full text backed the answer.
+        if (s.passages?.length) {
+          const sections = [...new Set(s.passages.map((p) => p.section))];
+          card.append(
+            el(
+              "div",
+              {
+                class: "ev",
+                title: s.passages.map((p) => p.snippet).join("\n\n"),
+              },
+              el("b", {}, "From the full text: "),
+              sections.join(" · "),
+            ),
+          );
+        }
+        return card;
       }
 
       function flash(id) {

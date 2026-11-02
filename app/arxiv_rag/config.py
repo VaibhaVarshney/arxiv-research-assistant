@@ -33,6 +33,16 @@ RERANK_MODEL_ARN = f"arn:aws:bedrock:{REGION}::foundation-model/{RERANK_MODEL_ID
 # how many candidates the reranker re-scores
 RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "50"))
 
+# Two-level retrieval (Phase 2, Step 4c): papers first, then the best passages inside them
+USE_FULLTEXT = os.getenv("USE_FULLTEXT", "true").lower() == "true"
+# chunk hits pulled from the top papers
+CHUNK_CANDIDATES = int(os.getenv("CHUNK_CANDIDATES", "40"))
+# passages handed to the LLM in total
+MAX_PASSAGES = int(os.getenv("MAX_PASSAGES", "8"))
+# so one long paper can't take every slot
+MAX_PASSAGES_PER_PAPER = 3
+MIN_PASSAGE_RELEVANCE = float(os.getenv("MIN_PASSAGE_RELEVANCE", "0.10"))
+
 # Hybrid search (Phase 2, Step 3)
 USE_HYBRID = os.getenv("USE_HYBRID", "false").lower(
 ) == "true"   # off by default: see Step 3 eval
