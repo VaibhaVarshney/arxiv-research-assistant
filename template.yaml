@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: arXiv research assistant - Phase 1 (daily ingestion, query API, web UI)
+Description: arXiv research assistant - Phase 2 (daily ingestion, reranked query API, web UI)
 
 Parameters:
   VectorBucketName:
@@ -12,6 +12,10 @@ Parameters:
   LlmModelId:
     Type: String
     Default: us.amazon.nova-2-lite-v1:0
+  MinRelevance:
+    Type: String
+    Default: "0.15"
+    Description: Reranker score a paper needs to be used as a source. Calibrate with scripts/eval_retrieval.py
   ContactEmail:
     Type: String
     Description: Sent to arXiv in the User-Agent header, as their API terms ask
@@ -129,6 +133,10 @@ Resources:
     Properties:
       Handler: handlers.query_handler
       Timeout: 29                # API Gateway gives up at 30 s, so there's no point running longer
+      Environment:
+        Variables:
+          USE_RERANK: "true"     # set to "false" to roll back to Phase 1 vector-only retrieval
+          MIN_RELEVANCE: !Ref MinRelevance
       Events:
         Ask:
           Type: HttpApi
@@ -146,6 +154,10 @@ Resources:
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
                 - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
                 - "arn:aws:bedrock:*::foundation-model/*"
+            - Effect: Allow
+              # The Rerank API. It then calls InvokeModel on Cohere Rerank, covered by foundation-model/* above.
+              Action: bedrock:Rerank
+              Resource: "*"
             - Effect: Allow
               Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"

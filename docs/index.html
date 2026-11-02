@@ -514,7 +514,9 @@
       }
 
       function sourceCard(s, showCited = true) {
-        const pct = Math.max(0, Math.min(100, Math.round(s.similarity * 100)));
+        // Phase 2: show the reranker's relevance score when present, else cosine similarity.
+        const score = s.relevance ?? s.similarity;
+        const pct = Math.max(0, Math.min(100, Math.round(score * 100)));
         const meta = el(
           "div",
           { class: "meta" },
@@ -524,14 +526,17 @@
             "span",
             {
               class: "sim",
-              title: "How closely this paper matches your question",
+              title:
+                s.relevance != null
+                  ? "Reranker relevance: how well this paper answers your question"
+                  : "How closely this paper matches your question",
             },
             el(
               "span",
               { class: "track" },
               el("span", { class: "fill", style: `width:${pct}%` }),
             ),
-            `${s.similarity.toFixed(2)}`,
+            `${score.toFixed(2)}`,
           ),
         );
         if (showCited)

@@ -1,0 +1,1174 @@
+{
+  "mode": "vector",
+  "k": 20,
+  "evalset": "evals/retrieval_v1.jsonl",
+  "summary": {
+    "all": {
+      "n": 30,
+      "hit@1": 0.6,
+      "recall@5": 0.8,
+      "mrr": 0.692,
+      "margin": 0.066,
+      "spread": 0.132
+    },
+    "specific": {
+      "n": 20,
+      "hit@1": 0.8,
+      "recall@5": 0.95,
+      "mrr": 0.869,
+      "margin": 0.095,
+      "spread": 0.152
+    },
+    "broad": {
+      "n": 10,
+      "hit@1": 0.2,
+      "recall@5": 0.5,
+      "mrr": 0.338,
+      "margin": -0.017,
+      "spread": 0.093
+    },
+    "median_latency_ms": 207
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "type": "specific",
+      "question": "How can reinforcement learning adjust the pacing logic for ad budgets so spend hits target without driving up cost per conversion?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.0737791657447815,
+      "spread": 0.14817512035369873,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.33248",
+          "score": 0.5099,
+          "relevant": true
+        },
+        {
+          "id": "2610.28409",
+          "score": 0.4361,
+          "relevant": false
+        },
+        {
+          "id": "2610.21319",
+          "score": 0.4,
+          "relevant": false
+        },
+        {
+          "id": "2610.28294",
+          "score": 0.3619,
+          "relevant": false
+        },
+        {
+          "id": "2610.23550",
+          "score": 0.3617,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q02",
+      "type": "specific",
+      "question": "Do LLM-generated conversations between kids and parents actually look like real ones, linguistically?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.23606836795806885,
+      "spread": 0.2496715784072876,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.35029",
+          "score": 0.5963,
+          "relevant": true
+        },
+        {
+          "id": "2610.25942",
+          "score": 0.3602,
+          "relevant": false
+        },
+        {
+          "id": "2610.36679",
+          "score": 0.3528,
+          "relevant": false
+        },
+        {
+          "id": "2610.34215",
+          "score": 0.3497,
+          "relevant": false
+        },
+        {
+          "id": "2610.23446",
+          "score": 0.3466,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q03",
+      "type": "specific",
+      "question": "Can speech-capable LLMs tell how much physical discomfort someone is in from the sound of their voice?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.17456799745559692,
+      "spread": 0.23099619150161743,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.38570",
+          "score": 0.5556,
+          "relevant": true
+        },
+        {
+          "id": "2610.23745",
+          "score": 0.381,
+          "relevant": false
+        },
+        {
+          "id": "2610.38402",
+          "score": 0.3441,
+          "relevant": false
+        },
+        {
+          "id": "2610.26890",
+          "score": 0.3249,
+          "relevant": false
+        },
+        {
+          "id": "2610.25599",
+          "score": 0.3246,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q04",
+      "type": "broad",
+      "question": "How can we figure out what actually drives an LLM's chain of thought, instead of trusting what it writes?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.0,
+      "margin": null,
+      "spread": 0.04983830451965332,
+      "first_relevant_rank": null,
+      "top": [
+        {
+          "id": "2610.37369",
+          "score": 0.4613,
+          "relevant": false
+        },
+        {
+          "id": "2610.21182",
+          "score": 0.4572,
+          "relevant": false
+        },
+        {
+          "id": "2610.28105",
+          "score": 0.4456,
+          "relevant": false
+        },
+        {
+          "id": "2610.32627",
+          "score": 0.4214,
+          "relevant": false
+        },
+        {
+          "id": "2610.25760",
+          "score": 0.4115,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q05",
+      "type": "specific",
+      "question": "How do you discover new, unseen node classes in graphs where linked nodes usually differ from each other?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.06588125228881836,
+      "spread": 0.09784621000289917,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.36696",
+          "score": 0.3748,
+          "relevant": true
+        },
+        {
+          "id": "2610.26322",
+          "score": 0.309,
+          "relevant": false
+        },
+        {
+          "id": "2610.22998",
+          "score": 0.3031,
+          "relevant": false
+        },
+        {
+          "id": "2610.31439",
+          "score": 0.2798,
+          "relevant": false
+        },
+        {
+          "id": "2610.27614",
+          "score": 0.277,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q06",
+      "type": "broad",
+      "question": "Do speech LLMs actually use tone of voice and emotion, or do they mostly rely on the words?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.04851973056793213,
+      "spread": 0.05727362632751465,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.38570",
+          "score": 0.387,
+          "relevant": true
+        },
+        {
+          "id": "2610.25599",
+          "score": 0.3529,
+          "relevant": true
+        },
+        {
+          "id": "2610.25942",
+          "score": 0.3385,
+          "relevant": false
+        },
+        {
+          "id": "2610.26446",
+          "score": 0.3374,
+          "relevant": false
+        },
+        {
+          "id": "2610.28105",
+          "score": 0.3298,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q07",
+      "type": "broad",
+      "question": "What are recent RL training methods for LLM agents doing long multi-step tool-use tasks?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.0,
+      "margin": null,
+      "spread": 0.07902109622955322,
+      "first_relevant_rank": null,
+      "top": [
+        {
+          "id": "2610.21571",
+          "score": 0.5524,
+          "relevant": false
+        },
+        {
+          "id": "2610.31483",
+          "score": 0.5338,
+          "relevant": false
+        },
+        {
+          "id": "2610.25957",
+          "score": 0.4987,
+          "relevant": false
+        },
+        {
+          "id": "2610.27032",
+          "score": 0.4894,
+          "relevant": false
+        },
+        {
+          "id": "2610.32412",
+          "score": 0.4733,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q08",
+      "type": "specific",
+      "question": "Can neural processes infer the intended goal of a demonstrated movement, the way babies do when copying adults?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.13301706314086914,
+      "spread": 0.1934589147567749,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.32688",
+          "score": 0.4927,
+          "relevant": true
+        },
+        {
+          "id": "2610.27140",
+          "score": 0.3597,
+          "relevant": false
+        },
+        {
+          "id": "2610.20351",
+          "score": 0.3141,
+          "relevant": false
+        },
+        {
+          "id": "2610.34638",
+          "score": 0.3039,
+          "relevant": false
+        },
+        {
+          "id": "2610.27279",
+          "score": 0.2992,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q09",
+      "type": "specific",
+      "question": "Is there a training set for text-to-video models where one continuous shot contains several things happening in sequence?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.5,
+      "margin": -0.016188740730285645,
+      "spread": 0.07281774282455444,
+      "first_relevant_rank": 2,
+      "top": [
+        {
+          "id": "2610.26801",
+          "score": 0.4217,
+          "relevant": false
+        },
+        {
+          "id": "2610.38241",
+          "score": 0.4056,
+          "relevant": true
+        },
+        {
+          "id": "2610.28632",
+          "score": 0.3923,
+          "relevant": false
+        },
+        {
+          "id": "2610.30861",
+          "score": 0.377,
+          "relevant": false
+        },
+        {
+          "id": "2610.32094",
+          "score": 0.3489,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "type": "specific",
+      "question": "Can a frozen LLM change how it routes computation through its layers depending on each input?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.1498841643333435,
+      "spread": 0.16982179880142212,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.38382",
+          "score": 0.5207,
+          "relevant": true
+        },
+        {
+          "id": "2610.27711",
+          "score": 0.3708,
+          "relevant": false
+        },
+        {
+          "id": "2610.37375",
+          "score": 0.3686,
+          "relevant": false
+        },
+        {
+          "id": "2610.25574",
+          "score": 0.3534,
+          "relevant": false
+        },
+        {
+          "id": "2610.33475",
+          "score": 0.3509,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "type": "specific",
+      "question": "In feed recommendation, should you keep the per-user and per-post baseline in engagement predictions or subtract it out?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.18534129858016968,
+      "spread": 0.20851564407348633,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.27423",
+          "score": 0.4765,
+          "relevant": true
+        },
+        {
+          "id": "2610.36239",
+          "score": 0.2912,
+          "relevant": false
+        },
+        {
+          "id": "2610.36813",
+          "score": 0.2855,
+          "relevant": false
+        },
+        {
+          "id": "2610.38026",
+          "score": 0.2849,
+          "relevant": false
+        },
+        {
+          "id": "2610.33426",
+          "score": 0.268,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "type": "specific",
+      "question": "Do language models understand why 'it's raining but I don't think so' is a strange thing to say?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.1142418384552002,
+      "spread": 0.14627063274383545,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.25586",
+          "score": 0.4664,
+          "relevant": true
+        },
+        {
+          "id": "2610.25816",
+          "score": 0.3522,
+          "relevant": false
+        },
+        {
+          "id": "2610.34809",
+          "score": 0.3469,
+          "relevant": false
+        },
+        {
+          "id": "2610.21204",
+          "score": 0.3402,
+          "relevant": false
+        },
+        {
+          "id": "2610.38096",
+          "score": 0.3201,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "type": "broad",
+      "question": "What are ways to cut optimizer state memory when training large language models?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.5,
+      "margin": -0.013250589370727539,
+      "spread": 0.07540136575698853,
+      "first_relevant_rank": 2,
+      "top": [
+        {
+          "id": "2610.21165",
+          "score": 0.4888,
+          "relevant": false
+        },
+        {
+          "id": "2610.24598",
+          "score": 0.4756,
+          "relevant": true
+        },
+        {
+          "id": "2610.35089",
+          "score": 0.4548,
+          "relevant": false
+        },
+        {
+          "id": "2610.25100",
+          "score": 0.4144,
+          "relevant": false
+        },
+        {
+          "id": "2610.33405",
+          "score": 0.4134,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "type": "specific",
+      "question": "How can an assistant learn a user's preferred behavior from their feedback instead of a fixed role description?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.15773916244506836,
+      "spread": 0.20795869827270508,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.38561",
+          "score": 0.5789,
+          "relevant": true
+        },
+        {
+          "id": "2610.38438",
+          "score": 0.4211,
+          "relevant": false
+        },
+        {
+          "id": "2610.31512",
+          "score": 0.3838,
+          "relevant": false
+        },
+        {
+          "id": "2610.24118",
+          "score": 0.3761,
+          "relevant": false
+        },
+        {
+          "id": "2610.22518",
+          "score": 0.3709,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q15",
+      "type": "specific",
+      "question": "When an LLM turns a word problem into solver code that runs but encodes the wrong constraints, how can you locate and fix the error?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.07366698980331421,
+      "spread": 0.10443717241287231,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.22568",
+          "score": 0.5103,
+          "relevant": true
+        },
+        {
+          "id": "2610.21393",
+          "score": 0.4367,
+          "relevant": false
+        },
+        {
+          "id": "2610.35328",
+          "score": 0.43,
+          "relevant": false
+        },
+        {
+          "id": "2610.37932",
+          "score": 0.4104,
+          "relevant": false
+        },
+        {
+          "id": "2610.35179",
+          "score": 0.4059,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q16",
+      "type": "broad",
+      "question": "Why do LLMs stop following rules set early in a long conversation?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.16666666666666666,
+      "margin": -0.03676837682723999,
+      "spread": 0.0309409499168396,
+      "first_relevant_rank": 6,
+      "top": [
+        {
+          "id": "2610.33766",
+          "score": 0.3988,
+          "relevant": false
+        },
+        {
+          "id": "2610.37369",
+          "score": 0.3806,
+          "relevant": false
+        },
+        {
+          "id": "2610.32060",
+          "score": 0.3729,
+          "relevant": false
+        },
+        {
+          "id": "2610.24048",
+          "score": 0.3728,
+          "relevant": false
+        },
+        {
+          "id": "2610.20200",
+          "score": 0.3679,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "type": "broad",
+      "question": "What does reinforcement learning with verifiable rewards actually add to a base model's math reasoning?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.17428147792816162,
+      "spread": 0.21770381927490234,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.24663",
+          "score": 0.7251,
+          "relevant": true
+        },
+        {
+          "id": "2610.24236",
+          "score": 0.5508,
+          "relevant": false
+        },
+        {
+          "id": "2610.20413",
+          "score": 0.5335,
+          "relevant": false
+        },
+        {
+          "id": "2610.27012",
+          "score": 0.5118,
+          "relevant": false
+        },
+        {
+          "id": "2610.37041",
+          "score": 0.5074,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q18",
+      "type": "specific",
+      "question": "How should a learned dynamics model be updated during deployment so planning holds up under distribution shift?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.5,
+      "margin": -0.0066947340965271,
+      "spread": 0.06164240837097168,
+      "first_relevant_rank": 2,
+      "top": [
+        {
+          "id": "2610.33594",
+          "score": 0.4555,
+          "relevant": false
+        },
+        {
+          "id": "2610.35636",
+          "score": 0.4488,
+          "relevant": true
+        },
+        {
+          "id": "2610.34329",
+          "score": 0.4393,
+          "relevant": false
+        },
+        {
+          "id": "2610.36109",
+          "score": 0.4083,
+          "relevant": false
+        },
+        {
+          "id": "2610.37891",
+          "score": 0.3938,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q19",
+      "type": "specific",
+      "question": "In multivariate forecasting with mixture-of-experts, do the gains come from extra parameters or from which channels go to which expert?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.1421334147453308,
+      "spread": 0.21352434158325195,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.33822",
+          "score": 0.6024,
+          "relevant": true
+        },
+        {
+          "id": "2610.20247",
+          "score": 0.4602,
+          "relevant": false
+        },
+        {
+          "id": "2610.37386",
+          "score": 0.4295,
+          "relevant": false
+        },
+        {
+          "id": "2610.26370",
+          "score": 0.4007,
+          "relevant": false
+        },
+        {
+          "id": "2610.22127",
+          "score": 0.3889,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q20",
+      "type": "specific",
+      "question": "Can stability conditions from control theory be used to regularize how hidden states evolve in a language model?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.028530359268188477,
+      "spread": 0.09439045190811157,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.24951",
+          "score": 0.4311,
+          "relevant": true
+        },
+        {
+          "id": "2610.27455",
+          "score": 0.4026,
+          "relevant": false
+        },
+        {
+          "id": "2610.20179",
+          "score": 0.3726,
+          "relevant": false
+        },
+        {
+          "id": "2610.26959",
+          "score": 0.3441,
+          "relevant": false
+        },
+        {
+          "id": "2610.30664",
+          "score": 0.3367,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q21",
+      "type": "specific",
+      "question": "Do early-exit predictors in recurrent-depth transformers really reduce computation in practice?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.125,
+      "margin": -0.06296592950820923,
+      "spread": 0.05430728197097778,
+      "first_relevant_rank": 8,
+      "top": [
+        {
+          "id": "2610.27559",
+          "score": 0.4138,
+          "relevant": false
+        },
+        {
+          "id": "2610.35556",
+          "score": 0.3832,
+          "relevant": false
+        },
+        {
+          "id": "2610.24766",
+          "score": 0.3776,
+          "relevant": false
+        },
+        {
+          "id": "2610.25300",
+          "score": 0.3724,
+          "relevant": false
+        },
+        {
+          "id": "2610.31428",
+          "score": 0.3595,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q22",
+      "type": "broad",
+      "question": "How can we detect models that behave well only when they think they are being evaluated?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.0,
+      "margin": null,
+      "spread": 0.12932896614074707,
+      "first_relevant_rank": null,
+      "top": [
+        {
+          "id": "2610.22333",
+          "score": 0.5068,
+          "relevant": false
+        },
+        {
+          "id": "2610.24613",
+          "score": 0.3937,
+          "relevant": false
+        },
+        {
+          "id": "2610.34737",
+          "score": 0.3875,
+          "relevant": false
+        },
+        {
+          "id": "2610.27455",
+          "score": 0.3822,
+          "relevant": false
+        },
+        {
+          "id": "2610.30803",
+          "score": 0.3775,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q23",
+      "type": "broad",
+      "question": "How reliable are sparse autoencoder features for understanding and steering LLM behavior?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.3333333333333333,
+      "margin": -0.043559253215789795,
+      "spread": 0.08991259336471558,
+      "first_relevant_rank": 3,
+      "top": [
+        {
+          "id": "2610.20139",
+          "score": 0.553,
+          "relevant": false
+        },
+        {
+          "id": "2610.25700",
+          "score": 0.539,
+          "relevant": false
+        },
+        {
+          "id": "2610.21261",
+          "score": 0.5094,
+          "relevant": true
+        },
+        {
+          "id": "2610.20417",
+          "score": 0.4855,
+          "relevant": false
+        },
+        {
+          "id": "2610.24118",
+          "score": 0.4631,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q24",
+      "type": "broad",
+      "question": "What are new designs for long-term memory in LLM agents?",
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.125,
+      "margin": -0.11900031566619873,
+      "spread": 0.06662529706954956,
+      "first_relevant_rank": 8,
+      "top": [
+        {
+          "id": "2610.34673",
+          "score": 0.6549,
+          "relevant": false
+        },
+        {
+          "id": "2610.35089",
+          "score": 0.6233,
+          "relevant": false
+        },
+        {
+          "id": "2610.27032",
+          "score": 0.6134,
+          "relevant": false
+        },
+        {
+          "id": "2610.33274",
+          "score": 0.595,
+          "relevant": false
+        },
+        {
+          "id": "2610.24090",
+          "score": 0.5882,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q25",
+      "type": "specific",
+      "question": "Can diffusion language models revise a whole draft answer in parallel to reason better?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.18793624639511108,
+      "spread": 0.21918219327926636,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.26542",
+          "score": 0.7069,
+          "relevant": true
+        },
+        {
+          "id": "2610.24717",
+          "score": 0.519,
+          "relevant": false
+        },
+        {
+          "id": "2610.32096",
+          "score": 0.5096,
+          "relevant": false
+        },
+        {
+          "id": "2610.37778",
+          "score": 0.5034,
+          "relevant": false
+        },
+        {
+          "id": "2610.33391",
+          "score": 0.4878,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q26",
+      "type": "broad",
+      "question": "How can coding agents build and keep reusable skill libraries up to date for a codebase?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.25,
+      "margin": -0.12616956233978271,
+      "spread": 0.13861465454101562,
+      "first_relevant_rank": 4,
+      "top": [
+        {
+          "id": "2610.23186",
+          "score": 0.6435,
+          "relevant": false
+        },
+        {
+          "id": "2610.24630",
+          "score": 0.5625,
+          "relevant": false
+        },
+        {
+          "id": "2610.35616",
+          "score": 0.52,
+          "relevant": false
+        },
+        {
+          "id": "2610.36188",
+          "score": 0.5173,
+          "relevant": true
+        },
+        {
+          "id": "2610.31461",
+          "score": 0.5049,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q27",
+      "type": "specific",
+      "question": "Is there a technical report on a roughly 35B mixture-of-experts agent model aimed at long-running scientific work?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.013504326343536377,
+      "spread": 0.0261574387550354,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.28578",
+          "score": 0.39,
+          "relevant": true
+        },
+        {
+          "id": "2610.32441",
+          "score": 0.3765,
+          "relevant": false
+        },
+        {
+          "id": "2610.21109",
+          "score": 0.3747,
+          "relevant": false
+        },
+        {
+          "id": "2610.20247",
+          "score": 0.3661,
+          "relevant": false
+        },
+        {
+          "id": "2610.21082",
+          "score": 0.3639,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q28",
+      "type": "specific",
+      "question": "How can associative memory networks trained without backprop avoid catastrophic forgetting without storing old data?",
+      "hit@1": 0.0,
+      "recall@5": 1.0,
+      "mrr": 0.25,
+      "margin": -0.04371309280395508,
+      "spread": 0.062026381492614746,
+      "first_relevant_rank": 4,
+      "top": [
+        {
+          "id": "2610.22439",
+          "score": 0.4042,
+          "relevant": false
+        },
+        {
+          "id": "2610.34833",
+          "score": 0.3841,
+          "relevant": false
+        },
+        {
+          "id": "2610.21799",
+          "score": 0.3727,
+          "relevant": false
+        },
+        {
+          "id": "2610.37139",
+          "score": 0.3605,
+          "relevant": true
+        },
+        {
+          "id": "2610.25150",
+          "score": 0.3421,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q29",
+      "type": "specific",
+      "question": "Is there a model that can both create and edit ambisonic 3D sound?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.1907482147216797,
+      "spread": 0.2675424814224243,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.34415",
+          "score": 0.5256,
+          "relevant": true
+        },
+        {
+          "id": "2610.38231",
+          "score": 0.3349,
+          "relevant": false
+        },
+        {
+          "id": "2610.28632",
+          "score": 0.3008,
+          "relevant": false
+        },
+        {
+          "id": "2610.24490",
+          "score": 0.2814,
+          "relevant": false
+        },
+        {
+          "id": "2610.38095",
+          "score": 0.2581,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "id": "q30",
+      "type": "specific",
+      "question": "How can LLMs generate driving test scenarios that expose failures caused by delayed or dropped vehicle-to-vehicle messages?",
+      "hit@1": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "margin": 0.09952640533447266,
+      "spread": 0.20576995611190796,
+      "first_relevant_rank": 1,
+      "top": [
+        {
+          "id": "2610.30979",
+          "score": 0.598,
+          "relevant": true
+        },
+        {
+          "id": "2610.21393",
+          "score": 0.4985,
+          "relevant": false
+        },
+        {
+          "id": "2610.32060",
+          "score": 0.4427,
+          "relevant": false
+        },
+        {
+          "id": "2610.37369",
+          "score": 0.4231,
+          "relevant": false
+        },
+        {
+          "id": "2610.32069",
+          "score": 0.3922,
+          "relevant": false
+        }
+      ]
+    }
+  ]
+}
