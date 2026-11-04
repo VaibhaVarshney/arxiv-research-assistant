@@ -1,0 +1,8 @@
+{"id": "a01", "paper": "2610.31314", "question": "What strict joint retention did Gemini-3.1-Pro get on StateTrack-Bench?", "expect": ["62.4"], "anchor": "named", "where": "results", "evidence": "Gemini-3.1-Pro | 62.4"}
+{"id": "a02", "paper": "2610.31314", "question": "On StateTrack-Bench, what share of failures were integrity failures rather than memory failures?", "expect": ["88.6"], "anchor": "named", "where": "results"}
+{"id": "a03", "paper": "2610.31314", "question": "Which model had the best retention on StateTrack-Bench, and what was its score?", "expect": ["DeepSeek-v4-Flash", ["100%", "100.0"]], "anchor": "named", "where": "results", "evidence": "best observed retention"}
+{"id": "a04", "paper": "2610.31314", "question": "What Cohen's kappa did the StateTrack-Bench annotators reach on role/persona judgments?", "expect": ["0.87"], "anchor": "named", "where": "setup"}
+{"id": "a05", "paper": "2610.31314", "question": "In the StateTrack-Bench paper, how much lost compliance does prepending the active state recover?", "expect": [["62%", "62 percent"]], "anchor": "named", "where": "results"}
+{"id": "a06", "paper": "2610.31314", "question": "Which model did the StateTrack-Bench authors use as their primary automated judge?", "expect": ["GPT-5.4"], "anchor": "named", "where": "setup", "evidence": "primary automated judge"}
+{"id": "a07", "paper": "2610.31314", "question": "How many primary scored outputs does the StateTrack-Bench core benchmark produce?", "expect": ["875"], "anchor": "named", "where": "setup"}
+{"id": "a08", "paper": "2610.31314", "question": "What retention did Claude-Sonnet-4-6 get on format constraints in StateTrack-Bench?", "expect": ["88.0"], "anchor": "named", "where": "table", "evidence": "Claude-Sonnet-4-6 | 90.4 | 88.0"}
