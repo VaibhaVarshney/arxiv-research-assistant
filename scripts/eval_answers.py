@@ -5,6 +5,7 @@ Answer eval: does the pipeline give the RIGHT detail, and if not, WHERE did it b
     python scripts/eval_answers.py evals/answers_v2.jsonl --repeat 3         # baseline (see below)
     python scripts/eval_answers.py evals/answers_v2.jsonl --modes abstracts,fulltext
     python scripts/eval_answers.py evals/answers_v2.jsonl --ids b01,b02 --show
+    python scripts/eval_answers.py evals/answers_v2.jsonl --repeat 3 --nominate     # Phase 3 Step 2
 
 Each question asks for a specific detail and lists strings a correct answer must ALL contain
 (an item can be a list of alternatives, any one of which counts).
@@ -80,6 +81,7 @@ def diagnose(row: dict, res: dict, mode: str) -> dict:
     else:
         bucket = "gen_miss"
     return {"id": row["id"], "bucket": bucket, "pass": ok, "paper_rank": rank,
+            "via": (src or {}).get("via"),
             "miss_kind": None if bucket != "paper_miss" else
             ("far" if rank is None else "cut" if rank <= MAX_SOURCES else "near"),
             "gold_chunks": gold, "got_chunks": got_chunks,
@@ -102,6 +104,8 @@ parser.add_argument("--repeat", type=int, default=1)
 parser.add_argument("--ids", help="comma list of question ids to run")
 parser.add_argument("--snapshot", default="evals/snapshot_ids.txt")
 parser.add_argument("--show", action="store_true", help="print every failing answer")
+parser.add_argument("--nominate", action="store_true",
+                    help="turn on passage nomination (USE_NOMINATION) for this run")
 args = parser.parse_args()
 
 path = Path(args.evalset)
@@ -120,10 +124,13 @@ if not any("gold_chunks" in r for r in rows):
 
 if args.snapshot and Path(args.snapshot).exists():
     graph.ALLOWED_IDS = set(Path(args.snapshot).read_text().split())
+if args.nominate:
+    graph.USE_NOMINATION = True
 modes = args.modes.split(",")
 n_calls = len(rows) * len(modes) * args.repeat
 print(f"{len(rows)} questions x {len(modes)} mode(s) x {args.repeat} repeat(s) = {n_calls} queries "
-      f"(~{n_calls * 4 // 60 + 1} min). snapshot={'on' if graph.ALLOWED_IDS else 'off'}")
+      f"(~{n_calls * 4 // 60 + 1} min). snapshot={'on' if graph.ALLOWED_IDS else 'off'}  "
+      f"nomination={'on' if graph.USE_NOMINATION else 'off'}")
 
 runs = {m: [] for m in modes}          # runs[mode][repeat] = [diagnosis per row]
 for mode in modes:
@@ -149,6 +156,8 @@ for mode in modes:
                             for b, n in buckets.most_common())
         if diags[0]["miss_kind"]:
             outcome += f"  ({diags[0]['miss_kind']})"
+        if any(d["via"] == "passage" for d in diags):
+            outcome += "  [paper got in via passage]"
         print(f"{r['id']:<5} {r['paper']:<11} {r.get('anchor', '?'):<9} {r.get('where', '?'):<8} "
               f"{rank or '-':>4}  {n_pass}/{args.repeat:<5} {outcome}")
         if args.show and n_pass < args.repeat:
@@ -173,7 +182,8 @@ for mode in modes:
          "buckets": {b: round(buckets[b] / args.repeat, 1) for b in BUCKETS},
          "paper_miss_kinds": {k: round(kinds[k] / args.repeat, 1) for k in ("cut", "near", "far")},
          "avg_tokens_in": sum(d["tokens_in"] for d in flat) // len(flat),
-         "median_ms": statistics.median(d["ms"] for d in flat)}
+         "median_ms": statistics.median(d["ms"] for d in flat),
+         "via_passage": round(sum(d["via"] == "passage" for d in flat) / args.repeat, 1)}
     for key in ("anchor", "where", "paper"):
         groups = defaultdict(list)
         for run in runs[mode]:
@@ -189,6 +199,8 @@ for mode in modes:
           f"avg input tokens {s['avg_tokens_in']:,}   median latency {s['median_ms']:.0f} ms")
     b = s["buckets"]
     k = s["paper_miss_kinds"]
+    if graph.USE_NOMINATION:
+        print(f"  gold paper got in via a passage: {s['via_passage']} per run")
     print(f"  misses per run: paper {b['paper_miss']} (cut {k['cut']}, near {k['near']}, far {k['far']}), "
           f"passage {b['passage_miss']}, generation {b['gen_miss']}")
     for key in ("anchor", "where", "paper"):
@@ -197,12 +209,14 @@ for mode in modes:
 
 out_dir = Path("evals/results")
 out_dir.mkdir(parents=True, exist_ok=True)
-out_file = out_dir / f"answers_{'+'.join(modes)}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+tag = "+".join(modes) + ("_nominate" if graph.USE_NOMINATION else "")
+out_file = out_dir / f"answers_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
 out_file.write_text(json.dumps({
     "evalset": str(path), "commit": git_commit(), "model": LLM_MODEL_ID,
     "flags": {"USE_RERANK": graph.USE_RERANK, "USE_HYBRID": graph.USE_HYBRID,
               "MIN_RELEVANCE": MIN_RELEVANCE, "MAX_SOURCES": MAX_SOURCES,
-              "snapshot": bool(graph.ALLOWED_IDS)},
+              "snapshot": bool(graph.ALLOWED_IDS), "USE_NOMINATION": graph.USE_NOMINATION,
+              "MIN_NOMINATION": graph.MIN_NOMINATION},
     "repeat": args.repeat, "summary": summary,
     "runs": {m: [[{k: v for k, v in d.items()} for d in run] for run in runs[m]] for m in modes},
 }, indent=2), encoding="utf-8")

@@ -43,6 +43,17 @@ MAX_PASSAGES = int(os.getenv("MAX_PASSAGES", "8"))
 MAX_PASSAGES_PER_PAPER = 3
 MIN_PASSAGE_RELEVANCE = float(os.getenv("MIN_PASSAGE_RELEVANCE", "0.10"))
 
+# Passage nomination (Phase 3, Step 2): full-text chunks of ANY paper can pull it into the
+# sources when its abstract doesn't match a detail question. See nominate.py.
+USE_NOMINATION = os.getenv("USE_NOMINATION", "false").lower() == "true"   # off until the evals say so
+# chunks pulled from the whole chunk index, then reranked
+NOMINATION_CHUNKS = int(os.getenv("NOMINATION_CHUNKS", "50"))
+# passage rerank score a paper needs to get in WITHOUT its abstract qualifying.
+# Starting point only: calibrate with  eval_retrieval.py --mode passages
+MIN_NOMINATION = float(os.getenv("MIN_NOMINATION", "0.40"))
+# at most this many of the MAX_SOURCES papers may enter through a passage alone
+MAX_NOMINATED = int(os.getenv("MAX_NOMINATED", "2"))
+
 # Hybrid search (Phase 2, Step 3)
 USE_HYBRID = os.getenv("USE_HYBRID", "false").lower(
 ) == "true"   # off by default: see Step 3 eval

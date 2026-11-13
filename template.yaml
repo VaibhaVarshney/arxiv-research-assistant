@@ -163,6 +163,9 @@ Resources:
           # The BM25 index still rebuilds nightly, so flipping this to "true" is all it takes.
           USE_HYBRID: "false"
           USE_FULLTEXT: "true"   # Step 4c: add full-text passages from the top papers ("false" = abstracts only)
+          # Phase 3 Step 2: strong full-text passages can nominate papers whose abstract doesn't
+          # match. Off until the answer + retrieval evals say ship (see nominate.py).
+          USE_NOMINATION: "false"
           MIN_RELEVANCE: !Ref MinRelevance
       Events:
         Ask:

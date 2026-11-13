@@ -7,6 +7,9 @@ The RAG pipeline as a LangGraph graph.
 Step 4c: "evidence" searches the full-text chunks of the papers retrieve picked, and
 hands the best passages to generate alongside each abstract (two-level retrieval).
 
+Phase 3, Step 2: with USE_NOMINATION, retrieve also searches full-text chunks of every
+paper (in parallel) and lets a strong passage nominate its paper. See nominate.py.
+
 Phase 2: retrieve is now multi-stage.
     Step 3: hybrid search casts the net. Vector top 50 + BM25 top 50, fused with RRF.
     Step 2: the reranker re-scores the fused 50; we keep those above MIN_RELEVANCE.
@@ -15,14 +18,18 @@ API still answers (BM25-only hits have no comparable score, so they're dropped t
 """
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from .config import (CANDIDATES_K, LLM_MODEL_ID, MAX_SOURCES, MIN_RELEVANCE, MIN_SIMILARITY,
-                     RERANK_CANDIDATES, USE_FULLTEXT, USE_HYBRID, USE_RERANK, log)
+from .config import (CANDIDATES_K, LLM_MODEL_ID, MAX_SOURCES, MIN_NOMINATION, MIN_RELEVANCE,
+                     MIN_SIMILARITY, RERANK_CANDIDATES, USE_FULLTEXT, USE_HYBRID, USE_NOMINATION,
+                     USE_RERANK, log)
+from .embeddings import embed_query
 from .evidence import gather_evidence
 from .llm import generate_answer
+from .nominate import merge, nominate
 from .rerank import rerank
 from .retrieval import hybrid_search, search
 
@@ -52,6 +59,8 @@ class RAGState(TypedDict, total=False):
     reranked: bool
     # {arxiv_id: [{chunk, section, text, score}]} from the full text
     passages: dict
+    # Step 2: {arxiv_id: [chunk hits]} that nominated each source (only papers that are sources)
+    nominated: dict
 
 
 def _similarity(hit: dict) -> float | None:
@@ -68,26 +77,60 @@ def _gather(q, cat, since, k):
     return search(q, k, cat, since)
 
 
+def _ms(t0: float) -> int:
+    return round((time.perf_counter() - t0) * 1000)
+
+
+def _abstract_level(q, cat, since) -> dict:
+    """Level 1 as in Phase 2: candidates by abstract, reranked. ranked=None if the reranker failed."""
+    t0 = time.perf_counter()
+    candidates = _restrict(_gather(q, cat, since, RERANK_CANDIDATES))
+    t_search = _ms(t0)
+    try:
+        # Score all candidates, not just the top 5. Same price (Cohere is billed per
+        # query of up to 100 docs, not per result), and Phase 3 needs the full ranking:
+        # where did the right paper land, and what's just below the cut?
+        ranked = rerank(q, candidates, len(candidates))
+    except Exception as e:
+        # Degrade, don't fail: a vector-only answer beats a 500 error.
+        log("rerank_failed", error=repr(e))
+        ranked = None
+    return {"candidates": candidates, "ranked": ranked,
+            "timings_ms": {"search": t_search, "rerank": _ms(t0) - t_search}}
+
+
+def _passage_level(q, cat, since) -> dict:
+    """Step 2: which papers have a passage that answers this? Never fatal."""
+    t0 = time.perf_counter()
+    try:
+        nominated = nominate(q, cat, since, ALLOWED_IDS)
+    except Exception as e:
+        log("nomination_failed", error=repr(e))
+        nominated = {}
+    return {"nominated": nominated, "timings_ms": {"nominate": _ms(t0)}}
+
+
 def retrieve(state: RAGState) -> RAGState:
     t0 = time.perf_counter()
     q, cat, since = state["question"], state.get(
         "category"), state.get("since")
     if USE_RERANK:
-        candidates = _restrict(_gather(q, cat, since, RERANK_CANDIDATES))
-        t_search = round((time.perf_counter() - t0) * 1000)
-        try:
-            # Score all candidates, not just the top 5. Same price (Cohere is billed per
-            # query of up to 100 docs, not per result), and Phase 3 needs the full ranking:
-            # where did the right paper land, and what's just below the cut?
-            ranked = rerank(q, candidates, len(candidates))
-            sources = [h for h in ranked[:MAX_SOURCES]
-                       if h["rerank_score"] >= MIN_RELEVANCE]
-            return {"candidates": ranked, "sources": sources, "reranked": True,
-                    "timings_ms": {"search": t_search,
-                                   "rerank": round((time.perf_counter() - t0) * 1000) - t_search}}
-        except Exception as e:
-            # Degrade, don't fail: a vector-only answer beats a 500 error.
-            log("rerank_failed", error=repr(e))
+        if USE_NOMINATION:
+            embed_query(q)      # embed once here; both searches below hit the cache
+            with ThreadPoolExecutor(max_workers=2) as pool:     # the two levels run side by side
+                fut_a = pool.submit(_abstract_level, q, cat, since)
+                fut_p = pool.submit(_passage_level, q, cat, since)
+                level1, level_p = fut_a.result(), fut_p.result()
+        else:
+            level1, level_p = _abstract_level(q, cat, since), {"nominated": {}, "timings_ms": {}}
+        timings = {**level1["timings_ms"], **level_p["timings_ms"]}
+        if level1["ranked"] is not None:
+            ordered, sources = merge(level1["ranked"], level_p["nominated"])
+            keep = {s["key"] for s in sources}
+            return {"candidates": ordered, "sources": sources, "reranked": True,
+                    "nominated": {pid: hits for pid, hits in level_p["nominated"].items() if pid in keep},
+                    "timings_ms": {**timings, "retrieve": _ms(t0)}}
+        candidates = level1["candidates"]
     else:
         candidates = _restrict(search(q, CANDIDATES_K, cat, since))
     candidates = sorted((c for c in candidates if "distance" in c),
@@ -106,8 +149,11 @@ def evidence(state: RAGState) -> RAGState:
     """Level 2: best full-text passages from the chosen papers. Never fatal: abstracts still work."""
     if not USE_FULLTEXT:
         return {"passages": {}}
+    # The chunks that nominated a paper are added to its chunk search, so the passage that
+    # got the paper in is always considered for the LLM.
+    extra = [h for hits in (state.get("nominated") or {}).values() for h in hits]
     try:
-        ev = gather_evidence(state["question"], state["sources"])
+        ev = gather_evidence(state["question"], state["sources"], extra)
     except Exception as e:
         log("evidence_failed", error=repr(e))
         return {"passages": {}}
@@ -182,6 +228,9 @@ def run_query(question: str, category: str | None = None, since: int | None = No
                 "found_by": [name for name, key in (("vector", "vector_rank"), ("bm25", "bm25_rank"))
                              if hit.get(key)] or None,
                 "relevance": round(hit["rerank_score"], 3) if "rerank_score" in hit else None,
+                # Step 2: how the paper got in. "passage" = its abstract alone wouldn't have.
+                "via": "abstract" if hit.get("via_abstract", True) else "passage",
+                "passage_relevance": round(hit["passage_score"], 3) if hit.get("passage_score") else None,
                 # Which parts of the full text backed the answer (short snippets, not the paper).
                 "passages": [{"chunk": p["chunk"], "section": p["section"], "score": p["score"],
                               "snippet": p["text"][:240]}
@@ -192,7 +241,8 @@ def run_query(question: str, category: str | None = None, since: int | None = No
         "question": question,
         "answer": state["answer"],
         "sources": [summarize(s) for s in state.get("sources", [])],
-        "closest_below_threshold": [summarize(c) for c in state.get("candidates", [])[:3]]
+        "closest_below_threshold": [summarize(c) for c in state.get("candidates", [])
+                                    if c.get("metadata")][:3]
         if not state.get("sources") else [],
         "invalid_citations": state.get("invalid_citations", []),
         "usage": state.get("usage", {}),
@@ -202,9 +252,13 @@ def run_query(question: str, category: str | None = None, since: int | None = No
         "fulltext_papers": sum(1 for s in state.get("sources", []) if passages.get(s["key"])),
         "min_similarity": MIN_SIMILARITY,
         "min_relevance": MIN_RELEVANCE,
+        "nomination": {"enabled": USE_NOMINATION, "min_passage_relevance": MIN_NOMINATION,
+                       "papers_via_passage": sum(1 for s in state.get("sources", [])
+                                                 if not s.get("via_abstract", True))},
     }
     if debug:
         out["ranking"] = [{"id": c["key"],
-                           "score": round(c.get("rerank_score", _similarity(c) or 0), 3)}
+                           "score": round(c.get("score", c.get("rerank_score", _similarity(c) or 0)), 3),
+                           "abstract": c.get("abstract_score"), "passage": c.get("passage_score")}
                           for c in state.get("candidates", [])]
     return out

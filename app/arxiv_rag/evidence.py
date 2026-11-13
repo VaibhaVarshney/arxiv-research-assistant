@@ -62,10 +62,17 @@ def select_passages(ranked: list[dict], max_total: int = MAX_PASSAGES,
     return picked
 
 
-def gather_evidence(question: str, sources: list[dict]) -> dict:
-    """Returns {"passages": {arxiv_id: [...]}, "timings_ms": {...}, "chunk_hits": n}."""
+def gather_evidence(question: str, sources: list[dict], extra: list[dict] | None = None) -> dict:
+    """Returns {"passages": {arxiv_id: [...]}, "timings_ms": {...}, "chunk_hits": n}.
+
+    extra: chunk hits already found for these papers (Phase 3 nomination). Merged in by key,
+    so a passage that nominated its paper always competes for a slot.
+    """
     t0 = time.perf_counter()
     hits = chunk_search(question, [s["key"] for s in sources])
+    if extra:
+        seen = {h["key"] for h in hits}
+        hits += [h for h in extra if h["key"] not in seen]
     t_search = round((time.perf_counter() - t0) * 1000)
     if not hits:
         return {"passages": {}, "chunk_hits": 0, "timings_ms": {"chunks": t_search}}
