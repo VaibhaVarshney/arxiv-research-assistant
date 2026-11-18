@@ -48,9 +48,13 @@ MIN_PASSAGE_RELEVANCE = float(os.getenv("MIN_PASSAGE_RELEVANCE", "0.10"))
 
 # Passage nomination (Phase 3, Step 2): full-text chunks of ANY paper can pull it into the
 # sources when its abstract doesn't match a detail question. See nominate.py.
-USE_NOMINATION = os.getenv("USE_NOMINATION", "false").lower() == "true"   # off until the evals say so
+USE_NOMINATION = os.getenv("USE_NOMINATION", "false").lower(
+) == "true"   # off until the evals say so
 # chunks pulled from the whole chunk index, then reranked
-NOMINATION_CHUNKS = int(os.getenv("NOMINATION_CHUNKS", "50"))
+# 25, not 50 (2026-11-18): same answer-eval score (90% vs 88%, paper misses 0 both), and the
+# passage rerank reads half the text, so it finishes alongside the abstract rerank
+# (352 ms vs 1.9 s for 50 on a slow-reranker day).
+NOMINATION_CHUNKS = int(os.getenv("NOMINATION_CHUNKS", "25"))
 # passage rerank score a paper needs to get in WITHOUT its abstract qualifying.
 # Calibrated 2026-11-13 (eval_retrieval.py --mode passages): off-topic questions top out at
 # 0.098, so 0.25 keeps a 2.5x margin. 0.40 scored the same on the answer eval but missed a07.

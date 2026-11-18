@@ -40,7 +40,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import arxiv_rag.graph as graph
-from arxiv_rag.config import LLM_MODEL_ID, MAX_SOURCES, MIN_RELEVANCE
+from arxiv_rag.config import (CHUNKS_PER_SOURCE, LLM_MODEL_ID, MAX_SOURCES, MIN_RELEVANCE,
+                              NOMINATION_CHUNKS)
 from arxiv_rag.graph import run_query
 
 REFUSAL = re.compile(r"(does|do) not (specify|mention|report|provide|state|include)|"
@@ -99,11 +100,13 @@ def git_commit() -> str:
 
 parser = argparse.ArgumentParser()
 parser.add_argument("evalset")
-parser.add_argument("--modes", default="fulltext", help="comma list: abstracts,fulltext")
+parser.add_argument("--modes", default="fulltext",
+                    help="comma list: abstracts,fulltext")
 parser.add_argument("--repeat", type=int, default=1)
 parser.add_argument("--ids", help="comma list of question ids to run")
 parser.add_argument("--snapshot", default="evals/snapshot_ids.txt")
-parser.add_argument("--show", action="store_true", help="print every failing answer")
+parser.add_argument("--show", action="store_true",
+                    help="print every failing answer")
 parser.add_argument("--nominate", action="store_true",
                     help="turn on passage nomination (USE_NOMINATION) for this run")
 args = parser.parse_args()
@@ -112,7 +115,8 @@ path = Path(args.evalset)
 if not path.exists():
     raise SystemExit(f"{path} not found.")
 # utf-8-sig: also accepts files that Windows editors saved with a BOM marker
-rows = [json.loads(l) for l in path.read_text(encoding="utf-8-sig").splitlines() if l.strip()]
+rows = [json.loads(l) for l in path.read_text(
+    encoding="utf-8-sig").splitlines() if l.strip()]
 if args.ids:
     keep = set(args.ids.split(","))
     rows = [r for r in rows if r["id"] in keep]
@@ -132,13 +136,15 @@ print(f"{len(rows)} questions x {len(modes)} mode(s) x {args.repeat} repeat(s) =
       f"(~{n_calls * 4 // 60 + 1} min). snapshot={'on' if graph.ALLOWED_IDS else 'off'}  "
       f"nomination={'on' if graph.USE_NOMINATION else 'off'}")
 
-runs = {m: [] for m in modes}          # runs[mode][repeat] = [diagnosis per row]
+# runs[mode][repeat] = [diagnosis per row]
+runs = {m: [] for m in modes}
 for mode in modes:
     graph.USE_FULLTEXT = mode == "fulltext"
     for rep in range(args.repeat):
         out = []
         for i, r in enumerate(rows, 1):
-            print(f"\r  {mode} run {rep + 1}/{args.repeat}: {i}/{len(rows)}", end="", flush=True)
+            print(
+                f"\r  {mode} run {rep + 1}/{args.repeat}: {i}/{len(rows)}", end="", flush=True)
             out.append(diagnose(r, run_query(r["question"], debug=True), mode))
         runs[mode].append(out)
     print()
@@ -162,7 +168,8 @@ for mode in modes:
               f"{rank or '-':>4}  {n_pass}/{args.repeat:<5} {outcome}")
         if args.show and n_pass < args.repeat:
             bad = next(d for d in diags if not d["pass"])
-            print(f"      gold {bad['gold_chunks']} got {bad['got_chunks']}: {bad['answer'][:300]!r}")
+            print(
+                f"      gold {bad['gold_chunks']} got {bad['got_chunks']}: {bad['answer'][:300]!r}")
 
 # ------------------------------------------------------------------ summary
 
@@ -205,7 +212,7 @@ for mode in modes:
           f"passage {b['passage_miss']}, generation {b['gen_miss']}")
     for key in ("anchor", "where", "paper"):
         print(f"  by {key:<7} " + "   ".join(f"{g} {v['pass']:.0%} (n={v['n']})"
-                                           for g, v in s[f"by_{key}"].items()))
+                                             for g, v in s[f"by_{key}"].items()))
 
 out_dir = Path("evals/results")
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -216,7 +223,8 @@ out_file.write_text(json.dumps({
     "flags": {"USE_RERANK": graph.USE_RERANK, "USE_HYBRID": graph.USE_HYBRID,
               "MIN_RELEVANCE": MIN_RELEVANCE, "MAX_SOURCES": MAX_SOURCES,
               "snapshot": bool(graph.ALLOWED_IDS), "USE_NOMINATION": graph.USE_NOMINATION,
-              "MIN_NOMINATION": graph.MIN_NOMINATION},
+              "MIN_NOMINATION": graph.MIN_NOMINATION,
+              "NOMINATION_CHUNKS": NOMINATION_CHUNKS, "CHUNKS_PER_SOURCE": CHUNKS_PER_SOURCE},
     "repeat": args.repeat, "summary": summary,
     "runs": {m: [[{k: v for k, v in d.items()} for d in run] for run in runs[m]] for m in modes},
 }, indent=2), encoding="utf-8")
