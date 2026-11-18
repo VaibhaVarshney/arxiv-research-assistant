@@ -35,8 +35,11 @@ RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "50"))
 
 # Two-level retrieval (Phase 2, Step 4c): papers first, then the best passages inside them
 USE_FULLTEXT = os.getenv("USE_FULLTEXT", "true").lower() == "true"
-# chunk hits pulled from the top papers
+# chunk hits pulled from the top papers: at least CHUNK_CANDIDATES, and CHUNKS_PER_SOURCE
+# per source paper beyond that, capped at 100 (S3 Vectors topK limit). Phase 3: a fixed 40
+# shared by 5 sources left too few per paper (a08, b08 lost their answer chunk).
 CHUNK_CANDIDATES = int(os.getenv("CHUNK_CANDIDATES", "40"))
+CHUNKS_PER_SOURCE = int(os.getenv("CHUNKS_PER_SOURCE", "16"))
 # passages handed to the LLM in total
 MAX_PASSAGES = int(os.getenv("MAX_PASSAGES", "8"))
 # so one long paper can't take every slot
@@ -49,8 +52,9 @@ USE_NOMINATION = os.getenv("USE_NOMINATION", "false").lower() == "true"   # off 
 # chunks pulled from the whole chunk index, then reranked
 NOMINATION_CHUNKS = int(os.getenv("NOMINATION_CHUNKS", "50"))
 # passage rerank score a paper needs to get in WITHOUT its abstract qualifying.
-# Starting point only: calibrate with  eval_retrieval.py --mode passages
-MIN_NOMINATION = float(os.getenv("MIN_NOMINATION", "0.40"))
+# Calibrated 2026-11-13 (eval_retrieval.py --mode passages): off-topic questions top out at
+# 0.098, so 0.25 keeps a 2.5x margin. 0.40 scored the same on the answer eval but missed a07.
+MIN_NOMINATION = float(os.getenv("MIN_NOMINATION", "0.25"))
 # at most this many of the MAX_SOURCES papers may enter through a passage alone
 MAX_NOMINATED = int(os.getenv("MAX_NOMINATED", "2"))
 

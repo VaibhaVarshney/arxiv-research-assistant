@@ -17,8 +17,8 @@ Papers without full text (no HTML, or not processed yet) simply keep abstract-on
 """
 import time
 
-from .config import (CHUNK_CANDIDATES, CHUNK_INDEX_NAME, MAX_PASSAGES, MAX_PASSAGES_PER_PAPER,
-                     MIN_PASSAGE_RELEVANCE, VECTOR_BUCKET, log, s3vectors)
+from .config import (CHUNK_CANDIDATES, CHUNK_INDEX_NAME, CHUNKS_PER_SOURCE, MAX_PASSAGES,
+                     MAX_PASSAGES_PER_PAPER, MIN_PASSAGE_RELEVANCE, VECTOR_BUCKET, log, s3vectors)
 from .embeddings import embed_query
 from .rerank import rerank
 
@@ -29,9 +29,15 @@ def passage_text(hit: dict) -> str:
     return f"{m.get('title', '')} > {m.get('section', '')}\n\n{m.get('text', '')}"
 
 
-def chunk_search(question: str, paper_ids: list[str], k: int = CHUNK_CANDIDATES) -> list[dict]:
+def pool_size(n_sources: int) -> int:
+    """Chunk candidates for n source papers: 1-2 papers keep 40, 5 papers get 80, never over 100."""
+    return min(100, max(CHUNK_CANDIDATES, CHUNKS_PER_SOURCE * n_sources))
+
+
+def chunk_search(question: str, paper_ids: list[str], k: int | None = None) -> list[dict]:
     if not paper_ids:
         return []
+    k = k or pool_size(len(paper_ids))
     return s3vectors.query_vectors(
         vectorBucketName=VECTOR_BUCKET, indexName=CHUNK_INDEX_NAME,
         queryVector={"float32": list(embed_query(question))}, topK=k,
