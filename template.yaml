@@ -163,6 +163,10 @@ Resources:
           # The BM25 index still rebuilds nightly, so flipping this to "true" is all it takes.
           USE_HYBRID: "false"
           USE_FULLTEXT: "true"   # Step 4c: add full-text passages from the top papers ("false" = abstracts only)
+          # Phase 3 Step 2: strong full-text passages can nominate papers whose abstract doesn't
+          # match (see nominate.py). Answer eval 73% -> 90%, paper misses 6 -> 0 per run.
+          # Kill switch: set "false" and redeploy.
+          USE_NOMINATION: "true"
           MIN_RELEVANCE: !Ref MinRelevance
       Events:
         Ask:
@@ -190,7 +194,10 @@ Resources:
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}"
             - Effect: Allow
               # Step 4c: search full-text chunks inside the papers retrieve picked.
-              Action: s3vectors:QueryVectors
+              # GetVectors too: S3 Vectors requires it for any query that returns metadata
+              # (the chunk text). Without it, nomination and the evidence step fail and fall
+              # back to abstracts only (found 2026-11-18 via nomination_failed in the logs).
+              Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
               Resource: !Sub "arn:aws:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${ChunkIndexName}"
             - Effect: Allow
               # Read the BM25 index (GetObject also covers the HeadObject freshness check).

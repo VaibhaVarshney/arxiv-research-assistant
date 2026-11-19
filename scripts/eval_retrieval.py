@@ -7,6 +7,10 @@ Step 1b: measure retrieval quality, so every Phase 2 change is proven, not guess
 
 Modes:  vector | bm25 | hybrid (vector+bm25, RRF) | rerank (vector -> rerank)
         hybrid_rerank (vector+bm25 -> RRF -> rerank: the Step 3 production pipeline)
+        passages        (Phase 3 Step 2) papers ranked by their best full-text passage alone.
+                        Its threshold check calibrates MIN_NOMINATION.
+        rerank_nominate (Phase 3 Step 2) abstract rerank + passage nomination, merged exactly
+                        as graph.py does it. Compare against --mode rerank.
 BM25 modes need the local index first:  python scripts/build_bm25.py
 
 Metrics (higher is better unless noted):
@@ -43,6 +47,7 @@ from datetime import datetime
 from pathlib import Path
 
 from arxiv_rag.config import RERANK_CANDIDATES
+from arxiv_rag.nominate import merge, nominate
 from arxiv_rag.rerank import rerank as rerank_hits
 from arxiv_rag.retrieval import bm25_search, hybrid_search, search
 
@@ -73,8 +78,25 @@ def hybrid_rerank(question: str, k: int) -> list[tuple[str, float]]:
     return [(h["key"], h["rerank_score"]) for h in rerank_hits(question, candidates, k)]
 
 
+def passages(question: str, k: int) -> list[tuple[str, float]]:
+    by_paper = nominate(question, allowed=snapshot)
+    ranked = sorted(((pid, hits[0]["rerank_score"]) for pid, hits in by_paper.items()),
+                    key=lambda x: -x[1])
+    return ranked[:k]
+
+
+def rerank_nominate(question: str, k: int) -> list[tuple[str, float]]:
+    candidates = [h for h in search(question, RERANK_CANDIDATES)
+                  if snapshot is None or h["key"] in snapshot]
+    ranked = rerank_hits(question, candidates, len(candidates))
+    # fetch=no-op: the eval only needs the order, not the abstracts
+    ordered, _ = merge(ranked, nominate(question, allowed=snapshot), fetch=lambda ids: {})
+    return [(e["key"], e["score"]) for e in ordered[:k]]
+
+
 RETRIEVERS = {"vector": vector, "bm25": bm25, "hybrid": hybrid, "rerank": rerank,
-              "hybrid_rerank": hybrid_rerank}
+              "hybrid_rerank": hybrid_rerank, "passages": passages,
+              "rerank_nominate": rerank_nominate}
 
 
 def score_one(ranked: list[tuple[str, float]], relevant: set[str]) -> dict:
