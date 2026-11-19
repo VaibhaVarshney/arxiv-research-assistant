@@ -28,6 +28,15 @@ from .retrieval import hybrid_search, search
 
 CITATION_PATTERN = re.compile(r"\[(\d{4}\.\d{4,5})\]")
 
+# Eval-only: restrict retrieval to a frozen set of paper IDs (evals/snapshot_ids.txt), so
+# papers indexed after the labels were written can't push the gold paper out of the top 5.
+# Always None in production.
+ALLOWED_IDS: set[str] | None = None
+
+
+def _restrict(hits: list[dict]) -> list[dict]:
+    return hits if ALLOWED_IDS is None else [h for h in hits if h["key"] in ALLOWED_IDS]
+
 
 class RAGState(TypedDict, total=False):
     question: str
@@ -64,11 +73,15 @@ def retrieve(state: RAGState) -> RAGState:
     q, cat, since = state["question"], state.get(
         "category"), state.get("since")
     if USE_RERANK:
-        candidates = _gather(q, cat, since, RERANK_CANDIDATES)
+        candidates = _restrict(_gather(q, cat, since, RERANK_CANDIDATES))
         t_search = round((time.perf_counter() - t0) * 1000)
         try:
-            ranked = rerank(q, candidates, MAX_SOURCES)
-            sources = [h for h in ranked if h["rerank_score"] >= MIN_RELEVANCE]
+            # Score all candidates, not just the top 5. Same price (Cohere is billed per
+            # query of up to 100 docs, not per result), and Phase 3 needs the full ranking:
+            # where did the right paper land, and what's just below the cut?
+            ranked = rerank(q, candidates, len(candidates))
+            sources = [h for h in ranked[:MAX_SOURCES]
+                       if h["rerank_score"] >= MIN_RELEVANCE]
             return {"candidates": ranked, "sources": sources, "reranked": True,
                     "timings_ms": {"search": t_search,
                                    "rerank": round((time.perf_counter() - t0) * 1000) - t_search}}
@@ -76,7 +89,7 @@ def retrieve(state: RAGState) -> RAGState:
             # Degrade, don't fail: a vector-only answer beats a 500 error.
             log("rerank_failed", error=repr(e))
     else:
-        candidates = search(q, CANDIDATES_K, cat, since)
+        candidates = _restrict(search(q, CANDIDATES_K, cat, since))
     candidates = sorted((c for c in candidates if "distance" in c),
                         key=lambda c: c["distance"])[:CANDIDATES_K]
     sources = [c for c in candidates if _similarity(
@@ -146,8 +159,12 @@ def build_graph():
 _app = None
 
 
-def run_query(question: str, category: str | None = None, since: int | None = None) -> dict:
-    """Run the graph and return a JSON-friendly result (used by Lambda and the CLI)."""
+def run_query(question: str, category: str | None = None, since: int | None = None,
+              debug: bool = False) -> dict:
+    """Run the graph and return a JSON-friendly result (used by Lambda and the CLI).
+
+    debug=True adds "ranking": every candidate paper in final order with its score
+    (used by the evals; the public API never sets it)."""
     global _app
     if _app is None:            # compile once per container, reuse when warm
         _app = build_graph()
@@ -166,11 +183,12 @@ def run_query(question: str, category: str | None = None, since: int | None = No
                              if hit.get(key)] or None,
                 "relevance": round(hit["rerank_score"], 3) if "rerank_score" in hit else None,
                 # Which parts of the full text backed the answer (short snippets, not the paper).
-                "passages": [{"section": p["section"], "score": p["score"], "snippet": p["text"][:240]}
+                "passages": [{"chunk": p["chunk"], "section": p["section"], "score": p["score"],
+                              "snippet": p["text"][:240]}
                              for p in passages.get(hit["key"], [])],
                 "cited": hit["key"] in cited}
 
-    return {
+    out = {
         "question": question,
         "answer": state["answer"],
         "sources": [summarize(s) for s in state.get("sources", [])],
@@ -185,3 +203,8 @@ def run_query(question: str, category: str | None = None, since: int | None = No
         "min_similarity": MIN_SIMILARITY,
         "min_relevance": MIN_RELEVANCE,
     }
+    if debug:
+        out["ranking"] = [{"id": c["key"],
+                           "score": round(c.get("rerank_score", _similarity(c) or 0), 3)}
+                          for c in state.get("candidates", [])]
+    return out
